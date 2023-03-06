@@ -12,6 +12,7 @@ pub struct Edges {
 }
 
 impl Edges {
+    /// Create a new [`Edges`] from edges
     pub fn new(mut edges: Vec<Edge>) -> Self {
         let mut store = Self::default();
 
@@ -36,6 +37,13 @@ impl Edges {
             start: start_idx,
             end: end_idx,
         });
+    }
+
+    /// Get all `lower point p` [`PointId`] slice for q
+    pub fn p_for_q(&self, q: PointId) -> &[PointId] {
+        self.point_edges.get(&q).map(|edge_indexes| {
+            &self.edge_lower_points[edge_indexes.start..edge_indexes.end]
+        }).unwrap_or(&[])
     }
 
     /// Returns number of edges
@@ -63,7 +71,7 @@ impl Edges {
     }
 
     /// get all edges
-    pub fn get_edges(&self) -> Vec<Edge> {
+    pub fn all_edges(&self) -> Vec<Edge> {
         let mut result = Vec::with_capacity(self.len());
         self.foreach_edge(|e| result.push(e));
         result
@@ -77,4 +85,42 @@ struct PointEdges {
     start: usize,
     /// end index in [`Edges`]
     end: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_edges() {
+        let edges = Edges::new(vec![
+            Edge {
+                p: PointId(0),
+                q: PointId(1),
+            },
+
+            Edge {
+                p: PointId(1),
+                q: PointId(2),
+            },
+
+            Edge {
+                p: PointId(2),
+                q: PointId(3),
+            },
+
+            Edge {
+                p: PointId(0),
+                q: PointId(3),
+            },
+        ]);
+
+        assert_eq!(edges.all_edges().len(), 4);
+        assert_eq!(edges.len(), 4);
+
+        assert_eq!(edges.p_for_q(PointId(0)).len(), 0);
+        assert_eq!(edges.p_for_q(PointId(1)).len(), 1);
+        assert_eq!(edges.p_for_q(PointId(2)).len(), 1);
+        assert_eq!(edges.p_for_q(PointId(3)).len(), 2);
+    }
 }

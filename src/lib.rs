@@ -238,6 +238,8 @@ mod tests {
         context.init_triangulate();
         dbg!(&context);
 
-        dbg!(context.edges.get_edges());
+        dbg!(context.edges.all_edges());
+
+        dbg!(context.edges.p_for_q(PointId(2)));
     }
 }
