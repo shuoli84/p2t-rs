@@ -2,10 +2,10 @@ mod points;
 mod edge;
 mod shape;
 mod advancing_front;
+use advancing_front::AdvancingFront;
 use edge::Edges;
+use points::Points;
 use shape::*;
-
-use std::cmp::Ordering;
 
 /// new type for point id, currently is the index in context
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -18,6 +18,9 @@ pub struct Sweep {
 impl Sweep {
     pub fn triangulate(context: &mut SweepContext) {
         context.init_triangulate();
+        // create the advancing front with initial triangle
+        let advancing_front = AdvancingFront::new(Triangle::new(context.points.get_id_by_y(0).unwrap(), Points::HEAD_ID, Points::TAIL_ID), &context.points);
+        dbg!(advancing_front);
     }
 
     pub fn sweep_points(&self, context: &mut SweepContext) {
@@ -27,45 +30,34 @@ impl Sweep {
 
 #[derive(Debug)]
 pub struct SweepContext {
-    /// All points
-    points: Vec<Point>,
-    /// store sorted points in y-axis in `init_triangulation`
-    sorted_points: Vec<PointId>,
-
+    points: Points,
     edges: Edges,
-
-    head: Point,
-    tail: Point,
 }
 
 
 impl SweepContext {
     const ALPHA: f64 = 0.3;
-    const HEAD_ID: PointId = PointId(usize::MAX);
-    const TAIL_ID: PointId = PointId(usize::MAX - 1);
 
     pub fn new(polyline: Vec<Point>) -> Self {
-        let mut point_edges: Vec<Vec<Edge>> = vec![vec![]; polyline.len()];
+        let mut points = Points::new(vec![]);
 
         let edges = {
             let mut edge_list = vec![];
 
-            let mut point_iter = polyline.iter().enumerate().map(|(idx, p)| (PointId(idx), p));
+            let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
             let first_point = point_iter.next().expect("empty polyline");
+
             let mut last_point = first_point;
             loop {
                 match point_iter.next() {
                     Some(p2) => {
                         let edge = Edge::new(last_point, p2);
-                        // edge.q
                         edge_list.push(edge);
-                        point_edges[edge.q.0].push(edge);
                         last_point = p2;
                     }
                     None => {
                         let edge = Edge::new(last_point, first_point);
                         edge_list.push(edge);
-                        point_edges[edge.q.0].push(edge);
                         break;
                     }
                 }
@@ -76,64 +68,30 @@ impl SweepContext {
         };
 
         Self {
-            points: polyline,
-            sorted_points: Default::default(),
+            points,
             edges,
-            head: Default::default(),
-            tail: Default::default(),
         }
+    }
+
+    pub fn triangulate(&mut self) {
+        self.init_triangulate();
+        // create the advancing front with initial triangle
+        let advancing_front = AdvancingFront::new(Triangle::new(self.points.get_id_by_y(0).unwrap(), Points::HEAD_ID, Points::TAIL_ID), &self.points);
+        dbg!(advancing_front);
     }
 
     pub fn init_triangulate(&mut self) {
-        let mut xmax = self.points[0].x;
-        let mut xmin = xmax;
-        let mut ymax = self.points[0].y;
-        let mut ymin = ymax;
-
-        for point in self.points.iter() {
-            xmax = xmax.max(point.x);
-            xmin = xmin.min(point.x);
-            ymax = ymax.max(point.y);
-            ymin = ymin.min(point.y);
-        }
-
-        let dx = (xmax - xmin) * Self::ALPHA;
-        let dy = (ymax - ymin) * Self::ALPHA;
-
-        self.head = Point::new(xmin - dx, ymin - dy);
-        self.tail = Point::new(xmax + dx, ymin - dy);
-
-        // sort points
-        let mut unsorted_points = self.points.iter().enumerate().map(|(idx, p)| (PointId(idx), p)).collect::<Vec<_>>();
-
-        unsorted_points.sort_by(|p1, p2| {
-            let p1 = p1.1;
-            let p2 = p2.1;
-
-            if p1.y < p2.y {
-                Ordering::Less
-            } else if p1.y == p2.y {
-                if p1.x < p2.x {
-                    Ordering::Less
-                } else {
-                    Ordering::Greater
-                }
-            } else {
-                Ordering::Greater
-            }
-        });
-
-        self.sorted_points = unsorted_points.into_iter().map(|(idx,_)| idx).collect::<Vec<_>>();
+        self.points = std::mem::take(&mut self.points).into_sorted();
     }
 
     pub fn get_point_id(&self, y_order: usize) -> Option<PointId> {
-        self.sorted_points.get(y_order).cloned()
+        self.points.get_id_by_y(y_order)
     }
 
     pub fn create_advancing_front(&mut self) {
         // initial triangle
         let p0 = self.get_point_id(0).unwrap();
-        let triangle = Triangle::new(p0, Self::TAIL_ID, Self::HEAD_ID);
+        let triangle = Triangle::new(p0, Points::TAIL_ID, Points::HEAD_ID);
 
         let mut map = Vec::new();
         map.push(triangle);
@@ -142,9 +100,7 @@ impl SweepContext {
     }
 
     pub fn add_point(&mut self, point: Point) -> PointId {
-        let point_id = PointId(self.points.len());
-        self.points.push(point);
-        point_id
+        self.points.add_point(point)
     }
 }
 
@@ -204,10 +160,11 @@ mod tests {
         dbg!(&context);
 
         context.init_triangulate();
+
+        context.triangulate();
         dbg!(&context);
 
         dbg!(context.edges.all_edges());
-
         dbg!(context.edges.p_for_q(PointId(2)));
     }
 }
