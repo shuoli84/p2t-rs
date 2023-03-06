@@ -20,13 +20,18 @@ impl Points {
             points,
             sorted_ids: vec![],
             head: Default::default(),
-            tail: Default::default()
+            tail: Default::default(),
         }
     }
 
     /// only call this after all points/edge mutation done
     pub fn into_sorted(self) -> Self {
-        let mut unsorted_points = self.points.iter().enumerate().map(|(idx, p)| (PointId(idx), p)).collect::<Vec<_>>();
+        let mut unsorted_points = self
+            .points
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| (PointId(idx), p))
+            .collect::<Vec<_>>();
 
         unsorted_points.sort_by(|p1, p2| {
             let p1 = p1.1;
@@ -44,7 +49,10 @@ impl Points {
                 Ordering::Greater
             }
         });
-        let sorted_ids = unsorted_points.into_iter().map(|(idx,_)| idx).collect::<Vec<_>>();
+        let sorted_ids = unsorted_points
+            .into_iter()
+            .map(|(idx, _)| idx)
+            .collect::<Vec<_>>();
         let (head, tail) = {
             let mut xmax = self.points[0].x;
             let mut xmin = xmax;
@@ -70,7 +78,7 @@ impl Points {
             points: self.points,
             sorted_ids,
             head,
-            tail
+            tail,
         }
     }
 
@@ -95,6 +103,16 @@ impl Points {
     pub fn get_point_by_y(&self, order: usize) -> Option<Point> {
         let id = self.sorted_ids.get(order)?;
         Some(self.points[id.0])
+    }
+
+    pub fn iter_point_by_y<'a>(
+        &'a self,
+        order: usize,
+    ) -> impl Iterator<Item = (PointId, Point)> + 'a {
+        self.sorted_ids.iter().skip(order).map(|id| {
+            let point = self.points[id.0];
+            (*id, point)
+        })
     }
 
     /// get point by y order

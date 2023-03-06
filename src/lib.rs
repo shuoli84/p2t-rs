@@ -1,26 +1,25 @@
-mod points;
-mod edge;
-mod shape;
 mod advancing_front;
+mod edge;
+mod points;
+mod shape;
+mod triangles;
 use advancing_front::AdvancingFront;
 use edge::Edges;
 use points::Points;
 use shape::*;
+use triangles::Triangles;
+
+use crate::advancing_front::SearchNode;
 
 /// new type for point id, currently is the index in context
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PointId(usize);
 
-pub struct Sweep {
-    
-}
+pub struct Sweep {}
 
 impl Sweep {
     pub fn triangulate(context: &mut SweepContext) {
-        context.init_triangulate();
-        // create the advancing front with initial triangle
-        let advancing_front = AdvancingFront::new(Triangle::new(context.points.get_id_by_y(0).unwrap(), Points::HEAD_ID, Points::TAIL_ID), &context.points);
-        dbg!(advancing_front);
+        unimplemented!()
     }
 
     pub fn sweep_points(&self, context: &mut SweepContext) {
@@ -32,12 +31,10 @@ impl Sweep {
 pub struct SweepContext {
     points: Points,
     edges: Edges,
+    triangles: Triangles,
 }
 
-
 impl SweepContext {
-    const ALPHA: f64 = 0.3;
-
     pub fn new(polyline: Vec<Point>) -> Self {
         let mut points = Points::new(vec![]);
 
@@ -61,7 +58,6 @@ impl SweepContext {
                         break;
                     }
                 }
-
             }
 
             Edges::new(edge_list)
@@ -70,17 +66,68 @@ impl SweepContext {
         Self {
             points,
             edges,
+            triangles: Triangles::new(),
         }
     }
 
     pub fn triangulate(&mut self) {
         self.init_triangulate();
+
+        let initial_triangle = self.triangles.insert(Triangle::new(
+            self.points.get_id_by_y(0).unwrap(),
+            Points::HEAD_ID,
+            Points::TAIL_ID,
+        ));
+
         // create the advancing front with initial triangle
-        let advancing_front = AdvancingFront::new(Triangle::new(self.points.get_id_by_y(0).unwrap(), Points::HEAD_ID, Points::TAIL_ID), &self.points);
-        dbg!(advancing_front);
+        let advancing_front = AdvancingFront::new(
+            self.triangles.get(initial_triangle),
+            initial_triangle,
+            &self.points,
+        );
+
+        self.sweep_points(advancing_front);
     }
 
-    pub fn init_triangulate(&mut self) {
+    fn sweep_points(&mut self, mut advancing_front: AdvancingFront) {
+        for (point_id, point) in self.points.iter_point_by_y(1) {
+            Self::point_event(point_id, point, &mut advancing_front, &mut self.triangles);
+            for p in self.edges.p_for_q(point_id) {
+                let edge = Edge { p: *p, q: point_id };
+                self.edge_event(edge);
+            }
+        }
+    }
+
+    fn point_event(
+        point_id: PointId,
+        point: Point,
+        advancing_front: &mut AdvancingFront,
+        triangles: &mut Triangles,
+    ) {
+        println!("point event: {point:?}");
+
+        match advancing_front.search_node(point.x) {
+            None => {
+                unreachable!()
+            }
+            Some(SearchNode::Middle(left, right)) => {
+                // create a new triange from (point, left, right)
+                let triangle = triangles.insert(Triangle::new(point_id, left.point, right.point));
+                let node_triangle = left.triangle.unwrap();
+                triangles.mark_neighbor(node_triangle, triangle);
+            }
+            Some(SearchNode::Left(p)) => {
+                todo!()
+            }
+        }
+    }
+
+    fn edge_event(&self, edge: Edge) {
+        println!("edge event: {edge:?}");
+    }
+
+    fn init_triangulate(&mut self) {
         self.points = std::mem::take(&mut self.points).into_sorted();
     }
 
@@ -95,51 +142,10 @@ impl SweepContext {
 
         let mut map = Vec::new();
         map.push(triangle);
-           
-
     }
 
     pub fn add_point(&mut self, point: Point) -> PointId {
         self.points.add_point(point)
-    }
-}
-
-
-#[derive(Debug, Clone, Copy)]
-pub struct Triangle {
-    /// flags to determine if an edge is a Constrained edge
-    constrained_edge: [bool; 3],
-
-    //// flags to determine if an edge is a Delauney edge
-    delaunay_edge: [bool; 3],
-
-    /// triangle points
-    pub points: (PointId, PointId, PointId),
-
-    /// Has this triangle been marked as an interior triangle?
-    interior: bool,
-}
-
-impl Triangle {
-    pub fn new(a: PointId, b: PointId, c: PointId) -> Self {
-        Self {
-            points: (a, b, c),
-            constrained_edge: [false, false, false],
-            delaunay_edge: [false, false, false],
-            interior: false,
-        }
-    }
-
-    pub fn get_point_0(&self, points: &[Point]) -> Point {
-        unsafe { *points.get_unchecked(self.points.0.0) } 
-    }
-
-    pub fn get_point_1(&self, points: &[Point]) -> Point {
-        unsafe { *points.get_unchecked(self.points.1.0) } 
-    }
-
-    pub fn get_point_2(&self, points: &[Point]) -> Point {
-        unsafe { *points.get_unchecked(self.points.2.0) } 
     }
 }
 
@@ -149,22 +155,15 @@ mod tests {
 
     #[test]
     fn test_context() {
-
         let polyline = vec![
             Point::new(0., 0.),
             Point::new(2., 0.),
             Point::new(1., 4.),
-            Point::new(0., 4.)
+            Point::new(0., 4.),
         ];
         let mut context = SweepContext::new(polyline);
         dbg!(&context);
 
-        context.init_triangulate();
-
         context.triangulate();
-        dbg!(&context);
-
-        dbg!(context.edges.all_edges());
-        dbg!(context.edges.p_for_q(PointId(2)));
     }
 }
