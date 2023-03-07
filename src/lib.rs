@@ -130,10 +130,12 @@ impl SweepContext {
             None => {
                 unreachable!()
             }
-            Some(LocateNode::Middle((left_point, left), (_, right))) => {
+            Some(LocateNode::Middle((node_point, node)) | LocateNode::Left((node_point, node))) => {
+                let (_, right) = advancing_front.next_node(node_point).unwrap();
+
                 let triangle =
-                    triangles.insert(Triangle::new(point_id, left.point_id, right.point_id));
-                let node_triangle = left.triangle.unwrap();
+                    triangles.insert(Triangle::new(point_id, node.point_id, right.point_id));
+                let node_triangle = node.triangle.unwrap();
                 triangles.mark_neighbor(node_triangle, triangle);
                 map.insert(triangle);
                 advancing_front.insert(point_id, point, triangle);
@@ -144,14 +146,11 @@ impl SweepContext {
 
                 // in middle case, the node's x should be less than point'x
                 // in left case, they are same.
-                if point.x <= left_point.x + f64::EPSILON {
-                    Self::fill(left_point, points, triangles, advancing_front, map);
+                if point.x <= node_point.x + f64::EPSILON {
+                    Self::fill(node_point, points, triangles, advancing_front, map);
                 }
 
                 Self::fill_advancing_front(point, points, triangles, advancing_front, map);
-            }
-            Some(LocateNode::Left(p)) => {
-                todo!()
             }
         }
     }

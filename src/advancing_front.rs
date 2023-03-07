@@ -118,14 +118,14 @@ impl AdvancingFront {
 }
 
 pub enum LocateNode<'a> {
-    Middle((Point, &'a Node), (Point, &'a Node)),
+    Middle((Point, &'a Node)),
     Left((Point, &'a Node)),
 }
 
 impl<'a> LocateNode<'a> {
-    pub fn middle(self) -> Option<((Point, &'a Node), (Point, &'a Node))> {
+    pub fn middle(self) -> Option<(Point, &'a Node)> {
         match self {
-            LocateNode::Middle(n1, n2) => Some((n1, n2)),
+            LocateNode::Middle(n1) => Some(n1),
             LocateNode::Left(_) => None,
         }
     }
@@ -147,10 +147,7 @@ impl AdvancingFront {
             return Some(LocateNode::Left((p1.0.point(), p1.1)));
         } else {
             let p2 = self.nodes.range(&key..).next().unwrap();
-            return Some(LocateNode::Middle(
-                (p1.0.point(), p1.1),
-                (p2.0.point(), p2.1),
-            ));
+            return Some(LocateNode::Middle((p1.0.point(), p1.1)));
         }
     }
 
