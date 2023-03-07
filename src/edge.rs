@@ -1,4 +1,4 @@
-use crate::{PointId, Edge};
+use crate::{Edge, PointId};
 
 /// A compact edge storage for edges. In this algorithm, only store
 /// edge in higher end point, so we just need to store the `lower` point.
@@ -31,19 +31,23 @@ impl Edges {
         self.edge_lower_points.push(edge.p);
         let end_idx = start_idx + 1;
 
-        self.point_edges.entry(edge.q).and_modify(|e| {
-            e.end = end_idx;
-        }).or_insert(PointEdges {
-            start: start_idx,
-            end: end_idx,
-        });
+        self.point_edges
+            .entry(edge.q)
+            .and_modify(|e| {
+                e.end = end_idx;
+            })
+            .or_insert(PointEdges {
+                start: start_idx,
+                end: end_idx,
+            });
     }
 
     /// Get all `lower point p` [`PointId`] slice for q
     pub fn p_for_q(&self, q: PointId) -> &[PointId] {
-        self.point_edges.get(&q).map(|edge_indexes| {
-            &self.edge_lower_points[edge_indexes.start..edge_indexes.end]
-        }).unwrap_or(&[])
+        self.point_edges
+            .get(&q)
+            .map(|edge_indexes| &self.edge_lower_points[edge_indexes.start..edge_indexes.end])
+            .unwrap_or(&[])
     }
 
     /// Returns number of edges
@@ -56,14 +60,9 @@ impl Edges {
         self.point_edges.iter().for_each(|(q, edge_indexes)| {
             for index in edge_indexes.start..edge_indexes.end {
                 // safety: the init logic ensures index is valid
-                let p = unsafe {
-                    self.edge_lower_points.get_unchecked(index)
-                };
+                let p = unsafe { self.edge_lower_points.get_unchecked(index) };
 
-                let edge = Edge {
-                    p: *p,
-                    q: *q,
-                };
+                let edge = Edge { p: *p, q: *q };
 
                 f(edge);
             }
@@ -77,7 +76,6 @@ impl Edges {
         result
     }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 struct PointEdges {
@@ -98,17 +96,14 @@ mod tests {
                 p: PointId(0),
                 q: PointId(1),
             },
-
             Edge {
                 p: PointId(1),
                 q: PointId(2),
             },
-
             Edge {
                 p: PointId(2),
                 q: PointId(3),
             },
-
             Edge {
                 p: PointId(0),
                 q: PointId(3),

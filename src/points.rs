@@ -1,6 +1,10 @@
 use std::cmp::Ordering;
 
-use crate::{shape::Point, PointId};
+use crate::shape::Point;
+
+/// new type for point id, currently is the index in context
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PointId(pub(crate) usize);
 
 /// Point store, provide a unique [`PointId`]
 #[derive(Debug, Default)]

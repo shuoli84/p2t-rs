@@ -4,31 +4,17 @@ mod points;
 mod shape;
 mod triangles;
 mod utils;
-use advancing_front::{AdvancingFront, Node};
+use advancing_front::AdvancingFront;
 use edge::Edges;
 use points::Points;
 use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
-use utils::{in_circle, orient_2d, Orientation};
+use utils::{in_circle, orient_2d};
 
 use crate::advancing_front::LocateNode;
 
-/// new type for point id, currently is the index in context
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PointId(usize);
-
-pub struct Sweep {}
-
-impl Sweep {
-    pub fn triangulate(context: &mut SweepContext) {
-        unimplemented!()
-    }
-
-    pub fn sweep_points(&self, context: &mut SweepContext) {
-        unimplemented!()
-    }
-}
+pub use points::PointId;
 
 #[derive(Debug)]
 pub struct SweepContext {
