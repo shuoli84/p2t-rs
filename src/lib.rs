@@ -398,7 +398,6 @@ impl SweepContext {
 
 struct Basin {
     left: Point,
-    bottom: Point,
     right: Point,
     width: f64,
     left_higher: bool,
@@ -472,7 +471,6 @@ impl SweepContext {
             bottom,
             Basin {
                 left,
-                bottom,
                 right,
                 width,
                 left_higher,

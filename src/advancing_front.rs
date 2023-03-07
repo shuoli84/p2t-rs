@@ -122,18 +122,18 @@ pub enum LocateNode<'a> {
     Left((Point, &'a Node)),
 }
 
-impl<'a> LocateNode<'a> {
-    pub fn middle(self) -> Option<(Point, &'a Node)> {
+impl LocateNode<'_> {
+    pub fn node(&self) -> &Node {
         match self {
-            LocateNode::Middle(n1) => Some(n1),
-            LocateNode::Left(_) => None,
+            LocateNode::Middle((_, n)) => n,
+            LocateNode::Left((_, n)) => n,
         }
     }
 
-    pub fn left(self) -> Option<(Point, &'a Node)> {
+    pub fn point(&self) -> Point {
         match self {
-            LocateNode::Middle(..) => None,
-            LocateNode::Left(node) => Some(node),
+            LocateNode::Middle((p, _)) => *p,
+            LocateNode::Left((p, _)) => *p,
         }
     }
 }
@@ -146,7 +146,6 @@ impl AdvancingFront {
         if p1.0 .0.x.eq(&x) {
             return Some(LocateNode::Left((p1.0.point(), p1.1)));
         } else {
-            let p2 = self.nodes.range(&key..).next().unwrap();
             return Some(LocateNode::Middle((p1.0.point(), p1.1)));
         }
     }
@@ -194,7 +193,7 @@ mod tests {
         let advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
         {
             let p = advancing_front.locate_node(0.).unwrap();
-            let point = p.left().unwrap().0;
+            let point = p.point();
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
