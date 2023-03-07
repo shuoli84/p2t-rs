@@ -94,6 +94,18 @@ impl AdvancingFront {
 
         Self { nodes }
     }
+
+    /// insert a new node for point and triangle
+    pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
+        self.nodes.insert(
+            point.into(),
+            Node {
+                value: point.x,
+                point: point_id,
+                triangle: Some(triangle_id),
+            },
+        );
+    }
 }
 
 pub enum SearchNode<'a> {

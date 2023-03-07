@@ -3,11 +3,13 @@ mod edge;
 mod points;
 mod shape;
 mod triangles;
+mod utils;
 use advancing_front::AdvancingFront;
 use edge::Edges;
 use points::Points;
+use rustc_hash::FxHashSet;
 use shape::*;
-use triangles::Triangles;
+use triangles::{TriangleId, Triangles};
 
 use crate::advancing_front::SearchNode;
 
@@ -32,6 +34,7 @@ pub struct SweepContext {
     points: Points,
     edges: Edges,
     triangles: Triangles,
+    map: FxHashSet<TriangleId>,
 }
 
 impl SweepContext {
@@ -67,6 +70,7 @@ impl SweepContext {
             points,
             edges,
             triangles: Triangles::new(),
+            map: Default::default(),
         }
     }
 
@@ -91,7 +95,13 @@ impl SweepContext {
 
     fn sweep_points(&mut self, mut advancing_front: AdvancingFront) {
         for (point_id, point) in self.points.iter_point_by_y(1) {
-            Self::point_event(point_id, point, &mut advancing_front, &mut self.triangles);
+            Self::point_event(
+                point_id,
+                point,
+                &mut advancing_front,
+                &mut self.triangles,
+                &mut self.map,
+            );
             for p in self.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
                 self.edge_event(edge);
@@ -104,6 +114,7 @@ impl SweepContext {
         point: Point,
         advancing_front: &mut AdvancingFront,
         triangles: &mut Triangles,
+        map: &mut FxHashSet<TriangleId>,
     ) {
         println!("point event: {point:?}");
 
@@ -116,6 +127,11 @@ impl SweepContext {
                 let triangle = triangles.insert(Triangle::new(point_id, left.point, right.point));
                 let node_triangle = left.triangle.unwrap();
                 triangles.mark_neighbor(node_triangle, triangle);
+                map.insert(triangle);
+
+                advancing_front.insert(point_id, point, triangle);
+
+                // legalize
             }
             Some(SearchNode::Left(p)) => {
                 todo!()
