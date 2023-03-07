@@ -125,10 +125,9 @@ impl SweepContext {
             None => {
                 unreachable!()
             }
-            Some(LocateNode::Middle((left_point, left), (right_point, right))) => {
-                let node_key = left_point;
-
-                let triangle = triangles.insert(Triangle::new(point_id, left.point, right.point));
+            Some(LocateNode::Middle((left_point, left), (_, right))) => {
+                let triangle =
+                    triangles.insert(Triangle::new(point_id, left.point_id, right.point_id));
                 let node_triangle = left.triangle.unwrap();
                 triangles.mark_neighbor(node_triangle, triangle);
                 map.insert(triangle);
@@ -138,17 +137,13 @@ impl SweepContext {
                     Self::map_triangle_to_nodes(triangle, triangles, advancing_front, points)
                 }
 
-                let new_node = advancing_front
-                    .locate_point_mut(point)
-                    .expect("just created the node");
-
                 // in middle case, the node's x should be less than point'x
                 // in left case, they are same.
                 if point.x <= left_point.x + f64::EPSILON {
-                    todo!("Fill()");
+                    Self::fill(left_point, points, triangles, advancing_front, map);
                 }
 
-                todo!("Fill Advancing Front");
+                Self::fill_advancing_front(point, advancing_front);
             }
             Some(LocateNode::Left(p)) => {
                 todo!()
@@ -311,6 +306,41 @@ impl SweepContext {
                 }
             }
         }
+    }
+
+    fn fill(
+        node_point: Point,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        // all following nodes exists for sure
+        let node = advancing_front.get_node(node_point).unwrap();
+        let prev_node = advancing_front.prev_node(node_point).unwrap();
+        let next_node = advancing_front.next_node(node_point).unwrap();
+
+        let triangle_id = triangles.insert(Triangle::new(
+            prev_node.1.point_id,
+            node.point_id,
+            next_node.1.point_id,
+        ));
+
+        if let Some(prev_tri) = prev_node.1.triangle {
+            triangles.mark_neighbor(triangle_id, prev_tri);
+        }
+        if let Some(node_tri) = node.triangle {
+            triangles.mark_neighbor(triangle_id, node_tri);
+        }
+        map.insert(triangle_id);
+
+        if !Self::legalize(triangle_id, points, triangles, advancing_front) {
+            Self::map_triangle_to_nodes(triangle_id, triangles, advancing_front, points);
+        }
+    }
+
+    fn fill_advancing_front(node_point: Point, advancing_front: &mut AdvancingFront) {
+        todo!()
     }
 
     fn edge_event(&self, edge: Edge) {

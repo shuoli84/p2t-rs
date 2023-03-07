@@ -52,7 +52,7 @@ impl PointKey {
 
 #[derive(Debug)]
 pub struct Node {
-    pub point: PointId,
+    pub point_id: PointId,
     pub triangle: Option<TriangleId>,
 }
 
@@ -75,21 +75,21 @@ impl AdvancingFront {
         nodes.insert(
             first_point.into(),
             Node {
-                point: triangle.points[1],
+                point_id: triangle.points[1],
                 triangle: Some(triangle_id),
             },
         );
         nodes.insert(
             middle_point.into(),
             Node {
-                point: triangle.points[0],
+                point_id: triangle.points[0],
                 triangle: Some(triangle_id),
             },
         );
         nodes.insert(
             tail_node.into(),
             Node {
-                point: triangle.points[2],
+                point_id: triangle.points[2],
                 triangle: None,
             },
         );
@@ -102,7 +102,7 @@ impl AdvancingFront {
         self.nodes.insert(
             point.into(),
             Node {
-                point: point_id,
+                point_id,
                 triangle: Some(triangle_id),
             },
         );
@@ -154,11 +154,25 @@ impl AdvancingFront {
         }
     }
 
+    /// get the node identified by `point`
+    pub fn get_node(&self, point: Point) -> Option<&Node> {
+        self.nodes.get(&PointKey(point))
+    }
+
     /// Get next node of the node identified by `point`
     pub fn next_node(&self, point: Point) -> Option<(Point, &Node)> {
         self.nodes
             .range(PointKey(point)..)
             .nth(1)
+            .map(|(p, v)| (p.point(), v))
+    }
+
+    /// Get prev node of the node identified by `point`
+    pub fn prev_node(&self, point: Point) -> Option<(Point, &Node)> {
+        self.nodes
+            .range(..PointKey(point))
+            .rev()
+            .nth(0)
             .map(|(p, v)| (p.point(), v))
     }
 }
@@ -174,7 +188,7 @@ mod tests {
         let mut points = Points::new(vec![]);
         let mut triangles = Triangles::new();
 
-        let p_0 = points.add_point(Point::new(0., 0.));
+        let p_0 = points.add_point(Point::new(-1., 0.));
         let p_1 = points.add_point(Point::new(0., 3.));
         let p_2 = points.add_point(Point::new(1., 1.));
         let triangle_id = triangles.insert(Triangle::new(p_0, p_1, p_2));
@@ -186,14 +200,12 @@ mod tests {
             let point = p.left().unwrap().0;
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
-        }
 
-        {
-            let (p1, p2) = advancing_front.locate_node(0.5).unwrap().middle().unwrap();
+            let prev_node = advancing_front.prev_node(point).unwrap();
+            assert_eq!(prev_node.0.x, -1.);
 
-            let p1 = p1.0;
-            let p2 = p2.0;
-            dbg!(p1, p2);
+            let next_node = advancing_front.next_node(point).unwrap();
+            assert_eq!(next_node.0.x, 1.);
         }
     }
 }

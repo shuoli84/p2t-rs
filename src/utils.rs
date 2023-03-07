@@ -84,8 +84,23 @@ pub fn is_scan_area(a: Point, b: Point, c: Point, d: Point) -> bool {
     true
 }
 
+/// Calculate angle for aob in radians
+pub fn angle(o: Point, a: Point, b: Point) -> f64 {
+    let ox = o.x;
+    let oy = o.y;
+    let dax = a.x - ox;
+    let day = a.y - oy;
+    let dbx = b.x - ox;
+    let dby = b.y - oy;
+    let x = dax * dby - day * dbx;
+    let y = dax * dbx + day * dby;
+    x.atan2(y)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use super::*;
 
     #[test]
@@ -116,6 +131,14 @@ mod tests {
         assert_eq!(
             orient_2d(Point::new(0., 0.), Point::new(1., 1.), Point::new(2., 1.)),
             Orientation::CW
+        );
+    }
+
+    #[test]
+    fn test_angle() {
+        assert_eq!(
+            angle(Point::new(0., 0.), Point::new(1., 0.), Point::new(1., 1.)),
+            PI / 4.
         );
     }
 }
