@@ -17,6 +17,20 @@ pub enum Orientation {
     Collinear,
 }
 
+impl Orientation {
+    pub fn is_cw(&self) -> bool {
+        matches!(self, Self::CW)
+    }
+
+    pub fn is_ccw(&self) -> bool {
+        matches!(self, Self::CCW)
+    }
+
+    pub fn is_collinear(&self) -> bool {
+        matches!(self, Self::Collinear)
+    }
+}
+
 pub fn orient_2d(a: Point, b: Point, c: Point) -> Orientation {
     let detleft = (a.x - c.x) * (b.y - c.y);
     let detright = (a.y - c.y) * (b.x - c.x);
@@ -82,6 +96,26 @@ pub fn is_scan_area(a: Point, b: Point, c: Point, d: Point) -> bool {
     }
 
     true
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Angle(f64);
+
+impl Angle {
+    /// Create angle from three points, is the angle for aob
+    pub fn new(o: Point, a: Point, b: Point) -> Self {
+        Self(angle(o, a, b))
+    }
+
+    /// whether the angle exceeds PI / 2
+    pub fn exceeds_90_degree(&self) -> bool {
+        self.0 > std::f64::consts::FRAC_PI_2
+    }
+
+    /// whether the angle is negative
+    pub fn is_negative(&self) -> bool {
+        self.0 < 0.
+    }
 }
 
 /// Calculate angle for aob in radians

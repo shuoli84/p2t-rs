@@ -10,7 +10,7 @@ use points::Points;
 use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
-use utils::in_circle;
+use utils::{in_circle, orient_2d, Orientation};
 
 use crate::advancing_front::LocateNode;
 
@@ -75,8 +75,13 @@ impl SweepContext {
         }
     }
 
+    pub fn add_point(&mut self, point: Point) -> PointId {
+        self.points.add_point(point)
+    }
+
     pub fn triangulate(&mut self) {
-        self.init_triangulate();
+        // sort all points first
+        self.points = std::mem::take(&mut self.points).into_sorted();
 
         let initial_triangle = self.triangles.insert(Triangle::new(
             self.points.get_id_by_y(0).unwrap(),
@@ -143,7 +148,7 @@ impl SweepContext {
                     Self::fill(left_point, points, triangles, advancing_front, map);
                 }
 
-                Self::fill_advancing_front(point, advancing_front);
+                Self::fill_advancing_front(point, points, triangles, advancing_front, map);
             }
             Some(LocateNode::Left(p)) => {
                 todo!()
@@ -308,6 +313,7 @@ impl SweepContext {
         }
     }
 
+    // todo: now advancing_front didn't delete the filled node
     fn fill(
         node_point: Point,
         points: &Points,
@@ -339,33 +345,219 @@ impl SweepContext {
         }
     }
 
-    fn fill_advancing_front(node_point: Point, advancing_front: &mut AdvancingFront) {
-        todo!()
+    fn fill_advancing_front(
+        node_point: Point,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        // fill right holes
+        while let Some((node_point, _)) = advancing_front.next_node(node_point) {
+            if advancing_front.next_node(node_point).is_some() {
+                // if HoleAngle exceeds 90 degrees then break
+                if Self::large_hole_dont_fill(node_point, &advancing_front) {
+                    break;
+                }
+
+                Self::fill(node_point, points, triangles, advancing_front, map);
+            } else {
+                break;
+            }
+        }
+
+        // fill left holes
+        while let Some((node_point, _)) = advancing_front.prev_node(node_point) {
+            if advancing_front.prev_node(node_point).is_some() {
+                // if HoleAngle exceeds 90 degrees then break
+                if Self::large_hole_dont_fill(node_point, &advancing_front) {
+                    break;
+                }
+
+                Self::fill(node_point, points, triangles, advancing_front, map);
+            } else {
+                break;
+            }
+        }
+
+        // file right basins
+        if let Some(basin_angle) = Self::basin_angle(node_point, advancing_front) {
+            if basin_angle < std::f64::consts::FRAC_PI_4 * 3. {
+                Self::fill_basin(node_point, points, triangles, advancing_front, map);
+            }
+        }
     }
 
     fn edge_event(&self, edge: Edge) {
         println!("edge event: {edge:?}");
     }
 
-    fn init_triangulate(&mut self) {
-        self.points = std::mem::take(&mut self.points).into_sorted();
+    fn large_hole_dont_fill(node_point: Point, advancing_front: &AdvancingFront) -> bool {
+        let (next_point, _next_node) = advancing_front.next_node(node_point).unwrap();
+        let (prev_point, _prev_node) = advancing_front.prev_node(node_point).unwrap();
+
+        let angle = utils::Angle::new(node_point, next_point, prev_point);
+        if angle.exceeds_90_degree() {
+            return false;
+        }
+        if angle.is_negative() {
+            return true;
+        }
+
+        // the original implentation also add two new check, which is not stated in the paper.
+        // I just leave it later, will try it when have deeper understanding.
+
+        true
+    }
+}
+
+struct Basin {
+    left: Point,
+    bottom: Point,
+    right: Point,
+    width: f64,
+    left_higher: bool,
+}
+
+/// Basin related methods
+impl SweepContext {
+    fn basin_angle(node_point: Point, advancing_front: &AdvancingFront) -> Option<f64> {
+        let (next_point, _) = advancing_front.next_node(node_point)?;
+        let (next_next_point, _) = advancing_front.next_node(next_point)?;
+
+        let ax = node_point.x - next_next_point.x;
+        let ay = node_point.y - next_next_point.y;
+        Some(ay.atan2(ax))
     }
 
-    pub fn get_point_id(&self, y_order: usize) -> Option<PointId> {
-        self.points.get_id_by_y(y_order)
+    /// basin is like a bowl, we first identify it's left, bottom, right node.
+    /// then fill it
+    fn fill_basin(
+        node_point: Point,
+
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) -> Option<()> {
+        let next_node = advancing_front.next_node(node_point)?;
+        let next_next_node = advancing_front.next_node(next_node.0)?;
+
+        // find the left
+        let left: Point;
+        if orient_2d(node_point, next_node.0, next_next_node.0).is_ccw() {
+            left = next_next_node.0;
+        } else {
+            left = next_node.0;
+        }
+
+        // find the bottom
+        let mut bottom: Point = left;
+        while let Some((next_node_point, _)) = advancing_front.next_node(bottom) {
+            if bottom.y >= next_node_point.y {
+                bottom = next_node_point;
+            } else {
+                break;
+            }
+        }
+
+        // no valid basin
+        if bottom.eq(&left) {
+            return None;
+        }
+
+        // find the right
+        let mut right = bottom;
+        while let Some((next_node_point, _)) = advancing_front.next_node(right) {
+            if bottom.y < next_node_point.y {
+                right = next_node_point;
+            } else {
+                break;
+            }
+        }
+        if right.eq(&bottom) {
+            // no valid basin
+            return None;
+        }
+
+        let width = right.x - left.x;
+        let left_higher: bool = left.y > right.y;
+
+        Self::fill_basin_req(
+            bottom,
+            Basin {
+                left,
+                bottom,
+                right,
+                width,
+                left_higher,
+            },
+            points,
+            triangles,
+            advancing_front,
+            map,
+        );
+
+        Some(())
     }
 
-    pub fn create_advancing_front(&mut self) {
-        // initial triangle
-        let p0 = self.get_point_id(0).unwrap();
-        let triangle = Triangle::new(p0, Points::TAIL_ID, Points::HEAD_ID);
+    fn fill_basin_req(
+        node: Point,
+        basin: Basin,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) -> Option<()> {
+        if Self::is_shallow(node, &basin) {
+            // stop fill if basin is shallow
+            return None;
+        }
 
-        let mut map = Vec::new();
-        map.push(triangle);
+        Self::fill(node, points, triangles, advancing_front, map);
+
+        // find the next node to fill
+        let prev_point = advancing_front.prev_node(node)?.0;
+        let next_point = advancing_front.next_node(node)?.0;
+
+        if prev_point.eq(&basin.left) && next_point.eq(&basin.right) {
+            return Some(());
+        }
+
+        let new_node = if prev_point.eq(&basin.left) {
+            let next_next_point = advancing_front.next_node(next_point)?.0;
+            if orient_2d(node, next_point, next_next_point).is_cw() {
+                return None;
+            }
+
+            next_point
+        } else if next_point.eq(&basin.right) {
+            let prev_prev_point = advancing_front.prev_node(prev_point)?.0;
+            if orient_2d(node, prev_point, prev_prev_point).is_ccw() {
+                return None;
+            }
+
+            prev_point
+        } else {
+            // continue with the neighbor node with lowest Y value
+            if prev_point.y < next_point.y {
+                prev_point
+            } else {
+                next_point
+            }
+        };
+
+        Self::fill_basin_req(new_node, basin, points, triangles, advancing_front, map)
     }
 
-    pub fn add_point(&mut self, point: Point) -> PointId {
-        self.points.add_point(point)
+    fn is_shallow(node: Point, basin: &Basin) -> bool {
+        let height = if basin.left_higher {
+            basin.left.y - node.y
+        } else {
+            basin.right.y - node.y
+        };
+
+        basin.width > height
     }
 }
 

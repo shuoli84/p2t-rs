@@ -45,6 +45,13 @@ impl Point {
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
+
+    /// whether two points are same.
+    /// Note: the lib don't support duplicate point, so eq means they are same point
+    ///    not two point with equal values
+    pub fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
