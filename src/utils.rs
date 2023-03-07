@@ -70,6 +70,20 @@ pub fn in_circle(pa: Point, pb: Point, pc: Point, pd: Point) -> bool {
     det > 0.
 }
 
+pub fn is_scan_area(a: Point, b: Point, c: Point, d: Point) -> bool {
+    let oadb = (a.x - b.x) * (d.y - b.y) - (d.x - b.x) * (a.y - b.y);
+    if oadb >= -f64::EPSILON {
+        return false;
+    }
+
+    let oadc = (a.x - c.x) * (d.y - c.y) - (d.x - c.x) * (a.y - c.y);
+    if oadc <= f64::EPSILON {
+        return false;
+    }
+
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
