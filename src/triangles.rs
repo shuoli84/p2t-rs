@@ -1,10 +1,15 @@
-use crate::shape::Triangle;
+use crate::{shape::Triangle, PointId};
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TriangleId(usize);
 
 impl TriangleId {
     pub const INVALID: TriangleId = TriangleId(usize::MAX);
+
+    /// whether id is invalid
+    pub fn invalid(&self) -> bool {
+        self.0 == Self::INVALID.0
+    }
 }
 
 /// Triangle store, store triangles and their neighborhood relations
@@ -64,6 +69,18 @@ impl Triangles {
 
     pub fn set_constrained(&mut self, id: TriangleId, index: usize, val: bool) {
         self.get_mut(id).constrained_edge[index] = val;
+    }
+
+    pub fn set_delunay_edge_ccw(&mut self, id: TriangleId, p: PointId, val: bool) {
+        self.get_mut(id).set_delunay_edge_ccw(p, val);
+    }
+
+    pub fn set_delunay_edge_cw(&mut self, id: TriangleId, p: PointId, val: bool) {
+        self.get_mut(id).set_delunay_edge_cw(p, val);
+    }
+
+    pub fn legalize(&mut self, id: TriangleId, o_point: PointId, n_point: PointId) {
+        self.get_mut(id).legalize(o_point, n_point);
     }
 }
 

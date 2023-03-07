@@ -130,6 +130,84 @@ impl Triangle {
         }
     }
 
+    /// constrained edge flag for edge `ccw` to given point
+    pub fn constrained_edge_ccw(&self, p: PointId) -> bool {
+        if p == self.points[0] {
+            self.constrained_edge[2]
+        } else if p == self.points[1] {
+            self.constrained_edge[0]
+        } else if p == self.points[2] {
+            self.constrained_edge[1]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    /// constrained edge flag for edge `cw` to given point
+    pub fn constrained_edge_cw(&self, p: PointId) -> bool {
+        if p == self.points[0] {
+            self.constrained_edge[1]
+        } else if p == self.points[1] {
+            self.constrained_edge[2]
+        } else if p == self.points[2] {
+            self.constrained_edge[0]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    /// set constrained edge flag for edge `ccw` to given point
+    pub fn set_constrained_edge_ccw(&mut self, p: PointId, val: bool) {
+        if p == self.points[0] {
+            self.constrained_edge[2] = val;
+        } else if p == self.points[1] {
+            self.constrained_edge[0] = val;
+        } else if p == self.points[2] {
+            self.constrained_edge[1] = val;
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    /// set constrained edge flag for edge `cw` to given point
+    pub fn set_constrained_edge_cw(&mut self, p: PointId, val: bool) {
+        if p == self.points[0] {
+            self.constrained_edge[1] = val;
+        } else if p == self.points[1] {
+            self.constrained_edge[2] = val;
+        } else if p == self.points[2] {
+            self.constrained_edge[0] = val;
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    /// neighbor counter clockwise to given point
+    pub fn neighbor_ccw(&self, p: PointId) -> TriangleId {
+        if p == self.points[0] {
+            self.neighbors[2]
+        } else if p == self.points[1] {
+            self.neighbors[0]
+        } else if p == self.points[2] {
+            self.neighbors[1]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    /// neighbor clockwise to given point
+    pub fn neighbor_cw(&self, p: PointId) -> TriangleId {
+        if p == self.points[0] {
+            self.neighbors[1]
+        } else if p == self.points[1] {
+            self.neighbors[2]
+        } else if p == self.points[2] {
+            self.neighbors[0]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
     /// Legalize triangle by rotating clockwise around `old_point`
     pub fn legalize(&mut self, old_point: PointId, new_point: PointId) {
         if old_point == self.points[0] {
@@ -147,6 +225,56 @@ impl Triangle {
         } else {
             panic!("point not belongs to triangle")
         }
+    }
+
+    /// delaunay edge flag for edge `ccw` to given point
+    pub fn delaunay_edge_ccw(&self, p: PointId) -> bool {
+        if p == self.points[0] {
+            self.delaunay_edge[2]
+        } else if p == self.points[1] {
+            self.delaunay_edge[0]
+        } else if p == self.points[2] {
+            self.delaunay_edge[1]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    /// delaunay edge flag for edge `cw` to given point
+    pub fn delaunay_edge_cw(&self, p: PointId) -> bool {
+        if p == self.points[0] {
+            self.delaunay_edge[1]
+        } else if p == self.points[1] {
+            self.delaunay_edge[2]
+        } else if p == self.points[2] {
+            self.delaunay_edge[0]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    pub fn set_delunay_edge_ccw(&mut self, p: PointId, val: bool) {
+        if self.points[0] == p {
+            self.delaunay_edge[2] = val;
+        } else if self.points[1] == p {
+            self.delaunay_edge[0] = val;
+        } else {
+            self.delaunay_edge[1] = val;
+        }
+    }
+
+    pub fn set_delunay_edge_cw(&mut self, p: PointId, val: bool) {
+        if self.points[0] == p {
+            self.delaunay_edge[1] = val;
+        } else if self.points[1] == p {
+            self.delaunay_edge[2] = val;
+        } else {
+            self.delaunay_edge[0] = val;
+        }
+    }
+
+    pub fn clear_neighbors(&mut self) {
+        self.neighbors = [TriangleId::INVALID; 3];
     }
 }
 

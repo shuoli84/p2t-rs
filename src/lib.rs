@@ -12,7 +12,7 @@ use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::in_circle;
 
-use crate::advancing_front::SearchNode;
+use crate::advancing_front::LocateNode;
 
 /// new type for point id, currently is the index in context
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -102,6 +102,7 @@ impl SweepContext {
                 &mut advancing_front,
                 &mut self.triangles,
                 &mut self.map,
+                &self.points,
             );
             for p in self.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
@@ -116,27 +117,52 @@ impl SweepContext {
         advancing_front: &mut AdvancingFront,
         triangles: &mut Triangles,
         map: &mut FxHashSet<TriangleId>,
+        points: &Points,
     ) {
         println!("point event: {point:?}");
 
-        match advancing_front.search_node(point.x) {
+        match advancing_front.locate_node(point.x) {
             None => {
                 unreachable!()
             }
-            Some(SearchNode::Middle(left, right)) => {
+            Some(LocateNode::Middle((left_point, left), (right_point, right))) => {
+                let node_key = left_point;
+
                 let triangle = triangles.insert(Triangle::new(point_id, left.point, right.point));
                 let node_triangle = left.triangle.unwrap();
                 triangles.mark_neighbor(node_triangle, triangle);
                 map.insert(triangle);
                 advancing_front.insert(point_id, point, triangle);
+
+                if !Self::legalize(triangle, points, triangles, advancing_front) {
+                    Self::map_triangle_to_nodes(triangle, triangles, advancing_front, points)
+                }
+
+                let new_node = advancing_front
+                    .locate_point_mut(point)
+                    .expect("just created the node");
+
+                // in middle case, the node's x should be less than point'x
+                // in left case, they are same.
+                if point.x <= left_point.x + f64::EPSILON {
+                    todo!("Fill()");
+                }
+
+                todo!("Fill Advancing Front");
             }
-            Some(SearchNode::Left(p)) => {
+            Some(LocateNode::Left(p)) => {
                 todo!()
             }
         }
     }
 
-    fn legalize(triangle_id: TriangleId, points: &Points, triangles: &mut Triangles) {
+    /// returns whether it is changed
+    fn legalize(
+        triangle_id: TriangleId,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+    ) -> bool {
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
         for i in 0..3 {
@@ -171,13 +197,117 @@ impl SweepContext {
 
                 if inside {
                     // first mark this shared edge as delaunay
+                    triangles.get_mut(triangle_id).delaunay_edge[i] = true;
+                    triangles.get_mut(ot_id).delaunay_edge[oi] = true;
 
                     // rotate shared edge one vertex cw to legalize it
-                    todo!();
+                    Self::rotate_triangle_pair(triangle_id, p, ot_id, op, triangles);
 
-                    // mark delaunay edge
-                    // triange.delaunay_edge[i] = true
-                    // ot.delaunay_edge[oi] = true
+                    // We now got one valid Delaunay Edge shared by two triangles
+                    // This gives us 4 new edges to check for Delaunay
+                    let not_legalized =
+                        !Self::legalize(triangle_id, points, triangles, advancing_front);
+                    if not_legalized {
+                        Self::map_triangle_to_nodes(
+                            triangle_id,
+                            triangles,
+                            advancing_front,
+                            points,
+                        );
+                    }
+
+                    let not_legalized = !Self::legalize(ot_id, points, triangles, advancing_front);
+                    if not_legalized {
+                        Self::map_triangle_to_nodes(ot_id, triangles, advancing_front, points);
+                    }
+
+                    triangles.get_mut(triangle_id).delaunay_edge[i] = false;
+                    triangles.get_mut(ot_id).delaunay_edge[oi] = false;
+
+                    // If triangle have been legalized no need to check the other edges since
+                    // the recursive legalization will handles those so we can end here.
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn rotate_triangle_pair(
+        triangle_id: TriangleId,
+        p: PointId,
+        ot_id: TriangleId,
+        op: PointId,
+        triangles: &mut Triangles,
+    ) {
+        let t = triangles.get(triangle_id).unwrap();
+        let ot = triangles.get(ot_id).unwrap();
+
+        let n1 = t.neighbor_ccw(p);
+        let n2 = t.neighbor_cw(p);
+        let n3 = ot.neighbor_ccw(op);
+        let n4 = ot.neighbor_cw(op);
+
+        let ce1 = t.constrained_edge_ccw(p);
+        let ce2 = t.constrained_edge_cw(p);
+        let ce3 = ot.constrained_edge_ccw(op);
+        let ce4 = ot.constrained_edge_cw(op);
+
+        let de1 = t.delaunay_edge_ccw(p);
+        let de2 = t.delaunay_edge_cw(p);
+        let de3 = ot.delaunay_edge_ccw(op);
+        let de4 = ot.delaunay_edge_cw(op);
+
+        // rotate shared edge one vertex cw to legalize it
+        triangles.legalize(triangle_id, p, op);
+        triangles.legalize(ot_id, p, op);
+
+        let t = triangles.get_mut(triangle_id);
+        t.set_delunay_edge_cw(p, de2);
+        t.set_delunay_edge_ccw(op, de3);
+        t.set_constrained_edge_cw(p, ce2);
+        t.set_constrained_edge_ccw(op, ce3);
+        t.clear_neighbors();
+
+        let ot = triangles.get_mut(ot_id);
+        ot.set_delunay_edge_ccw(p, de1);
+        ot.set_delunay_edge_cw(op, de4);
+        ot.set_constrained_edge_ccw(p, ce1);
+        ot.set_constrained_edge_cw(op, ce4);
+        ot.clear_neighbors();
+
+        if !n1.invalid() {
+            triangles.mark_neighbor(ot_id, n1);
+        }
+        if !n2.invalid() {
+            triangles.mark_neighbor(triangle_id, n2);
+        }
+        if !n3.invalid() {
+            triangles.mark_neighbor(triangle_id, n3);
+        }
+        if !n4.invalid() {
+            triangles.mark_neighbor(ot_id, n4);
+        }
+
+        triangles.mark_neighbor(triangle_id, ot_id);
+    }
+
+    /// update advancing front node's triangle
+    fn map_triangle_to_nodes(
+        triangle_id: TriangleId,
+        triangles: &Triangles,
+        advancing_front: &mut AdvancingFront,
+        points: &Points,
+    ) {
+        let triangle = triangles.get(triangle_id).unwrap();
+        for i in 0..3 {
+            if triangle.neighbors[i].invalid() {
+                let point = points
+                    .get_point(triangle.point_cw(triangle.points[i]))
+                    .expect("should exist");
+                if let Some(node) = advancing_front.locate_point_mut(point) {
+                    node.triangle = Some(triangle_id);
                 }
             }
         }

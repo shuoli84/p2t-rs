@@ -43,10 +43,15 @@ impl From<Point> for PointKey {
     }
 }
 
+impl PointKey {
+    /// clone the point
+    fn point(&self) -> Point {
+        self.0
+    }
+}
+
 #[derive(Debug)]
 pub struct Node {
-    /// value is the end x value for fronting edge
-    pub value: f64,
     pub point: PointId,
     pub triangle: Option<TriangleId>,
 }
@@ -70,7 +75,6 @@ impl AdvancingFront {
         nodes.insert(
             first_point.into(),
             Node {
-                value: first_point.x,
                 point: triangle.points[1],
                 triangle: Some(triangle_id),
             },
@@ -78,7 +82,6 @@ impl AdvancingFront {
         nodes.insert(
             middle_point.into(),
             Node {
-                value: middle_point.x,
                 point: triangle.points[0],
                 triangle: Some(triangle_id),
             },
@@ -86,7 +89,6 @@ impl AdvancingFront {
         nodes.insert(
             tail_node.into(),
             Node {
-                value: tail_node.x,
                 point: triangle.points[2],
                 triangle: None,
             },
@@ -100,7 +102,6 @@ impl AdvancingFront {
         self.nodes.insert(
             point.into(),
             Node {
-                value: point.x,
                 point: point_id,
                 triangle: Some(triangle_id),
             },
@@ -108,38 +109,57 @@ impl AdvancingFront {
     }
 }
 
-pub enum SearchNode<'a> {
-    Middle(&'a Node, &'a Node),
-    Left(&'a Node),
+impl AdvancingFront {
+    /// locate the node containing point
+    pub fn locate_point_mut(&mut self, point: Point) -> Option<&mut Node> {
+        let key = PointKey(point);
+        self.nodes.get_mut(&key)
+    }
 }
 
-impl<'a> SearchNode<'a> {
-    pub fn middle(self) -> Option<(&'a Node, &'a Node)> {
+pub enum LocateNode<'a> {
+    Middle((Point, &'a Node), (Point, &'a Node)),
+    Left((Point, &'a Node)),
+}
+
+impl<'a> LocateNode<'a> {
+    pub fn middle(self) -> Option<((Point, &'a Node), (Point, &'a Node))> {
         match self {
-            SearchNode::Middle(n1, n2) => Some((n1, n2)),
-            SearchNode::Left(_) => None,
+            LocateNode::Middle(n1, n2) => Some((n1, n2)),
+            LocateNode::Left(_) => None,
         }
     }
 
-    pub fn left(self) -> Option<&'a Node> {
+    pub fn left(self) -> Option<(Point, &'a Node)> {
         match self {
-            SearchNode::Middle(..) => None,
-            SearchNode::Left(node) => Some(node),
+            LocateNode::Middle(..) => None,
+            LocateNode::Left(node) => Some(node),
         }
     }
 }
 
 impl AdvancingFront {
-    pub fn search_node(&self, x: f64) -> Option<SearchNode> {
+    pub fn locate_node(&self, x: f64) -> Option<LocateNode> {
         let key = PointKey(Point::new(x, f64::MAX));
         let mut iter = self.nodes.range(..&key).rev();
         let p1 = iter.next()?;
         if p1.0 .0.x.eq(&x) {
-            return Some(SearchNode::Left(p1.1));
+            return Some(LocateNode::Left((p1.0.point(), p1.1)));
         } else {
             let p2 = self.nodes.range(&key..).next().unwrap();
-            return Some(SearchNode::Middle(p1.1, p2.1));
+            return Some(LocateNode::Middle(
+                (p1.0.point(), p1.1),
+                (p2.0.point(), p2.1),
+            ));
         }
+    }
+
+    /// Get next node of the node identified by `point`
+    pub fn next_node(&self, point: Point) -> Option<(Point, &Node)> {
+        self.nodes
+            .range(PointKey(point)..)
+            .nth(1)
+            .map(|(p, v)| (p.point(), v))
     }
 }
 
@@ -162,17 +182,17 @@ mod tests {
 
         let advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
         {
-            let p = advancing_front.search_node(0.).unwrap();
-            let point = points.get_point(p.left().unwrap().point).unwrap();
+            let p = advancing_front.locate_node(0.).unwrap();
+            let point = p.left().unwrap().0;
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
         }
 
         {
-            let (p1, p2) = advancing_front.search_node(0.5).unwrap().middle().unwrap();
+            let (p1, p2) = advancing_front.locate_node(0.5).unwrap().middle().unwrap();
 
-            let p1 = points.get_point(p1.point).unwrap();
-            let p2 = points.get_point(p2.point).unwrap();
+            let p1 = p1.0;
+            let p2 = p2.0;
             dbg!(p1, p2);
         }
     }
