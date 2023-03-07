@@ -99,6 +99,17 @@ impl Points {
         }
     }
 
+    /// get point for id
+    pub unsafe fn get_point_uncheck(&self, point_id: PointId) -> Point {
+        if point_id == Self::HEAD_ID {
+            self.head
+        } else if point_id == Self::TAIL_ID {
+            self.tail
+        } else {
+            unsafe { self.points.get_unchecked(point_id.0).clone() }
+        }
+    }
+
     /// get point by y order
     pub fn get_point_by_y(&self, order: usize) -> Option<Point> {
         let id = self.sorted_ids.get(order)?;

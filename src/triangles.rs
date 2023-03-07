@@ -27,8 +27,11 @@ impl Triangles {
         id
     }
 
-    pub fn get(&self, id: TriangleId) -> &Triangle {
-        unsafe { self.triangles.get_unchecked(id.0) }
+    pub fn get(&self, id: TriangleId) -> Option<&Triangle> {
+        if id == TriangleId::INVALID {
+            return None;
+        }
+        unsafe { Some(self.triangles.get_unchecked(id.0)) }
     }
 
     pub fn get_mut(&mut self, id: TriangleId) -> &mut Triangle {
@@ -37,24 +40,30 @@ impl Triangles {
 
     /// mark two triangle as neighbor
     pub fn mark_neighbor(&mut self, left: TriangleId, right: TriangleId) {
-        let left_triangle = self.get(left).clone();
-        let right_triangle = self.get(right).clone();
+        let left_triangle = self.get(left).unwrap().clone();
+        let right_triangle = self.get(right).unwrap().clone();
 
-        if right_triangle.contains_pair((left_triangle.points.1, left_triangle.points.2)) {
-            self.get_mut(left).neighbors.0 = right;
-        } else if right_triangle.contains_pair((left_triangle.points.0, left_triangle.points.2)) {
-            self.get_mut(left).neighbors.1 = right;
-        } else if right_triangle.contains_pair((left_triangle.points.0, left_triangle.points.1)) {
-            self.get_mut(left).neighbors.2 = right;
+        if right_triangle.contains_pair((left_triangle.points[1], left_triangle.points[2])) {
+            self.get_mut(left).neighbors[0] = right;
+        } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[2])) {
+            self.get_mut(left).neighbors[1] = right;
+        } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[1])) {
+            self.get_mut(left).neighbors[2] = right;
         }
 
-        if left_triangle.contains_pair((right_triangle.points.1, right_triangle.points.2)) {
-            self.get_mut(right).neighbors.0 = left;
-        } else if left_triangle.contains_pair((right_triangle.points.0, right_triangle.points.2)) {
-            self.get_mut(right).neighbors.1 = left;
-        } else if left_triangle.contains_pair((right_triangle.points.0, right_triangle.points.1)) {
-            self.get_mut(right).neighbors.2 = left;
+        if left_triangle.contains_pair((right_triangle.points[1], right_triangle.points[2])) {
+            self.get_mut(right).neighbors[0] = left;
+        } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[2]))
+        {
+            self.get_mut(right).neighbors[1] = left;
+        } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[1]))
+        {
+            self.get_mut(right).neighbors[2] = left;
         }
+    }
+
+    pub fn set_constrained(&mut self, id: TriangleId, index: usize, val: bool) {
+        self.get_mut(id).constrained_edge[index] = val;
     }
 }
 
@@ -79,10 +88,10 @@ mod tests {
 
         triangles.mark_neighbor(t1, t2);
         {
-            let t = triangles.get(t1);
-            assert_eq!(t.neighbors.0, t2);
-            let t = triangles.get(t2);
-            assert_eq!(t.neighbors.2, t1);
+            let t = triangles.get(t1).unwrap();
+            assert_eq!(t.neighbors[0], t2);
+            let t = triangles.get(t2).unwrap();
+            assert_eq!(t.neighbors[2], t1);
         }
     }
 }

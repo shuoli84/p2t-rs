@@ -58,20 +58,20 @@ impl AdvancingFront {
         let mut nodes = BTreeMap::<PointKey, Node>::new();
 
         let first_point = points
-            .get_point(triangle.points.1)
+            .get_point(triangle.points[1])
             .expect("should not fail");
         let middle_point = points
-            .get_point(triangle.points.0)
+            .get_point(triangle.points[0])
             .expect("should not fail");
         let tail_node = points
-            .get_point(triangle.points.2)
+            .get_point(triangle.points[2])
             .expect("should not fail");
 
         nodes.insert(
             first_point.into(),
             Node {
                 value: first_point.x,
-                point: triangle.points.1,
+                point: triangle.points[1],
                 triangle: Some(triangle_id),
             },
         );
@@ -79,7 +79,7 @@ impl AdvancingFront {
             middle_point.into(),
             Node {
                 value: middle_point.x,
-                point: triangle.points.0,
+                point: triangle.points[0],
                 triangle: Some(triangle_id),
             },
         );
@@ -87,7 +87,7 @@ impl AdvancingFront {
             tail_node.into(),
             Node {
                 value: tail_node.x,
-                point: triangle.points.2,
+                point: triangle.points[2],
                 triangle: None,
             },
         );
@@ -158,7 +158,7 @@ mod tests {
         let p_1 = points.add_point(Point::new(0., 3.));
         let p_2 = points.add_point(Point::new(1., 1.));
         let triangle_id = triangles.insert(Triangle::new(p_0, p_1, p_2));
-        let triangle = triangles.get(triangle_id);
+        let triangle = triangles.get(triangle_id).unwrap();
 
         let advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
         {

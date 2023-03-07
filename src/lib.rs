@@ -4,12 +4,13 @@ mod points;
 mod shape;
 mod triangles;
 mod utils;
-use advancing_front::AdvancingFront;
+use advancing_front::{AdvancingFront, Node};
 use edge::Edges;
 use points::Points;
 use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
+use utils::in_circle;
 
 use crate::advancing_front::SearchNode;
 
@@ -85,7 +86,7 @@ impl SweepContext {
 
         // create the advancing front with initial triangle
         let advancing_front = AdvancingFront::new(
-            self.triangles.get(initial_triangle),
+            self.triangles.get(initial_triangle).unwrap(),
             initial_triangle,
             &self.points,
         );
@@ -123,18 +124,61 @@ impl SweepContext {
                 unreachable!()
             }
             Some(SearchNode::Middle(left, right)) => {
-                // create a new triange from (point, left, right)
                 let triangle = triangles.insert(Triangle::new(point_id, left.point, right.point));
                 let node_triangle = left.triangle.unwrap();
                 triangles.mark_neighbor(node_triangle, triangle);
                 map.insert(triangle);
-
                 advancing_front.insert(point_id, point, triangle);
-
-                // legalize
             }
             Some(SearchNode::Left(p)) => {
                 todo!()
+            }
+        }
+    }
+
+    fn legalize(triangle_id: TriangleId, points: &Points, triangles: &mut Triangles) {
+        // To legalize a triangle we start by finding if any of the three edges
+        // violate the Delaunay condition
+        for i in 0..3 {
+            let triangle = triangles.get(triangle_id).unwrap();
+            if triangle.delaunay_edge[i] {
+                continue;
+            }
+
+            let ot_id = triangle.neighbors[i];
+            if let Some(ot) = triangles.get(ot_id) {
+                let p = triangle.points[i];
+                let op = ot.opposite_point(&triangle, p);
+
+                let oi = ot.point_index(op);
+
+                // if this is a constrained edge or a delaunay edge(only during recursive legalization)
+                // then we should not try to legalize
+                if ot.constrained_edge[oi] || ot.delaunay_edge[oi] {
+                    triangles.set_constrained(triangle_id, i, ot.constrained_edge[oi]);
+                    continue;
+                }
+
+                // all point id is maintained by points.
+                let inside = unsafe {
+                    in_circle(
+                        points.get_point_uncheck(p),
+                        points.get_point_uncheck(triangle.point_ccw(p)),
+                        points.get_point_uncheck(triangle.point_cw(p)),
+                        points.get_point_uncheck(op),
+                    )
+                };
+
+                if inside {
+                    // first mark this shared edge as delaunay
+
+                    // rotate shared edge one vertex cw to legalize it
+                    todo!();
+
+                    // mark delaunay edge
+                    // triange.delaunay_edge[i] = true
+                    // ot.delaunay_edge[oi] = true
+                }
             }
         }
     }
