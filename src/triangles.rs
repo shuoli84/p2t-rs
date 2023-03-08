@@ -39,7 +39,11 @@ impl Triangles {
         unsafe { Some(self.triangles.get_unchecked(id.0)) }
     }
 
-    pub fn get_mut(&mut self, id: TriangleId) -> &mut Triangle {
+    pub fn get_mut(&mut self, id: TriangleId) -> Option<&mut Triangle> {
+        self.triangles.get_mut(id.0)
+    }
+
+    pub fn get_mut_unchecked(&mut self, id: TriangleId) -> &mut Triangle {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
 
@@ -49,38 +53,38 @@ impl Triangles {
         let right_triangle = self.get(right).unwrap().clone();
 
         if right_triangle.contains_pair((left_triangle.points[1], left_triangle.points[2])) {
-            self.get_mut(left).neighbors[0] = right;
+            self.get_mut_unchecked(left).neighbors[0] = right;
         } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[2])) {
-            self.get_mut(left).neighbors[1] = right;
+            self.get_mut_unchecked(left).neighbors[1] = right;
         } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[1])) {
-            self.get_mut(left).neighbors[2] = right;
+            self.get_mut_unchecked(left).neighbors[2] = right;
         }
 
         if left_triangle.contains_pair((right_triangle.points[1], right_triangle.points[2])) {
-            self.get_mut(right).neighbors[0] = left;
+            self.get_mut_unchecked(right).neighbors[0] = left;
         } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[2]))
         {
-            self.get_mut(right).neighbors[1] = left;
+            self.get_mut_unchecked(right).neighbors[1] = left;
         } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[1]))
         {
-            self.get_mut(right).neighbors[2] = left;
+            self.get_mut_unchecked(right).neighbors[2] = left;
         }
     }
 
     pub fn set_constrained(&mut self, id: TriangleId, index: usize, val: bool) {
-        self.get_mut(id).constrained_edge[index] = val;
+        self.get_mut_unchecked(id).constrained_edge[index] = val;
     }
 
     pub fn set_delunay_edge_ccw(&mut self, id: TriangleId, p: PointId, val: bool) {
-        self.get_mut(id).set_delunay_edge_ccw(p, val);
+        self.get_mut_unchecked(id).set_delunay_edge_ccw(p, val);
     }
 
     pub fn set_delunay_edge_cw(&mut self, id: TriangleId, p: PointId, val: bool) {
-        self.get_mut(id).set_delunay_edge_cw(p, val);
+        self.get_mut_unchecked(id).set_delunay_edge_cw(p, val);
     }
 
     pub fn legalize(&mut self, id: TriangleId, o_point: PointId, n_point: PointId) {
-        self.get_mut(id).legalize(o_point, n_point);
+        self.get_mut_unchecked(id).legalize(o_point, n_point);
     }
 }
 

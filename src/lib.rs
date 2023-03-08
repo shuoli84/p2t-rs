@@ -97,11 +97,21 @@ impl SweepContext {
             );
             for p in self.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
-                self.edge_event(edge);
+                Self::edge_event(
+                    edge,
+                    point,
+                    &self.points,
+                    &mut self.triangles,
+                    &mut advancing_front,
+                    &mut self.map,
+                );
             }
         }
     }
+}
 
+/// Point event related methods
+impl SweepContext {
     fn point_event(
         point_id: PointId,
         point: Point,
@@ -182,8 +192,8 @@ impl SweepContext {
 
                 if inside {
                     // first mark this shared edge as delaunay
-                    triangles.get_mut(triangle_id).delaunay_edge[i] = true;
-                    triangles.get_mut(ot_id).delaunay_edge[oi] = true;
+                    triangles.get_mut_unchecked(triangle_id).delaunay_edge[i] = true;
+                    triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = true;
 
                     // rotate shared edge one vertex cw to legalize it
                     Self::rotate_triangle_pair(triangle_id, p, ot_id, op, triangles);
@@ -206,8 +216,8 @@ impl SweepContext {
                         Self::map_triangle_to_nodes(ot_id, triangles, advancing_front, points);
                     }
 
-                    triangles.get_mut(triangle_id).delaunay_edge[i] = false;
-                    triangles.get_mut(ot_id).delaunay_edge[oi] = false;
+                    triangles.get_mut_unchecked(triangle_id).delaunay_edge[i] = false;
+                    triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = false;
 
                     // If triangle have been legalized no need to check the other edges since
                     // the recursive legalization will handles those so we can end here.
@@ -248,14 +258,14 @@ impl SweepContext {
         triangles.legalize(triangle_id, p, op);
         triangles.legalize(ot_id, p, op);
 
-        let t = triangles.get_mut(triangle_id);
+        let t = triangles.get_mut_unchecked(triangle_id);
         t.set_delunay_edge_cw(p, de2);
         t.set_delunay_edge_ccw(op, de3);
         t.set_constrained_edge_cw(p, ce2);
         t.set_constrained_edge_ccw(op, ce3);
         t.clear_neighbors();
 
-        let ot = triangles.get_mut(ot_id);
+        let ot = triangles.get_mut_unchecked(ot_id);
         ot.set_delunay_edge_ccw(p, de1);
         ot.set_delunay_edge_cw(op, de4);
         ot.set_constrained_edge_ccw(p, ce1);
@@ -373,10 +383,6 @@ impl SweepContext {
         }
     }
 
-    fn edge_event(&self, edge: Edge) {
-        println!("edge event: {edge:?}");
-    }
-
     fn large_hole_dont_fill(node_point: Point, advancing_front: &AdvancingFront) -> bool {
         let (next_point, _next_node) = advancing_front.next_node(node_point).unwrap();
         let (prev_point, _prev_node) = advancing_front.prev_node(node_point).unwrap();
@@ -393,6 +399,276 @@ impl SweepContext {
         // I just leave it later, will try it when have deeper understanding.
 
         true
+    }
+}
+
+#[derive(Debug)]
+struct EdgeEvent {
+    constrained_edge: Edge,
+    p: Point,
+    q: Point,
+    /// Whether the constrained edge is "right" edge, p.x larger than q.x
+    right: bool,
+}
+
+impl EdgeEvent {
+    fn p_id(&self) -> PointId {
+        self.constrained_edge.p
+    }
+
+    fn q_id(&self) -> PointId {
+        self.constrained_edge.q
+    }
+}
+
+/// EdgeEvent related methods
+impl SweepContext {
+    fn edge_event(
+        edge: Edge,
+        node_point: Point,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        let p = points.get_point(edge.p).unwrap();
+        let q = points.get_point(edge.q).unwrap();
+        let edge_event = EdgeEvent {
+            constrained_edge: edge,
+            p,
+            q,
+            right: p.x > q.x,
+        };
+        println!("edge event: {edge_event:?}");
+
+        let node = advancing_front.get_node(node_point).unwrap();
+
+        if let Some(triangle) = node.triangle {
+            if Self::try_mark_edge_for_triangle(&edge, triangle, triangles) {
+                return;
+            }
+        }
+
+        // for now we will do all needed filling
+        Self::fill_edge_event(
+            edge_event,
+            node_point,
+            points,
+            triangles,
+            advancing_front,
+            map,
+        );
+    }
+
+    /// try mark edge for triangle if the constrained edge already is a edge
+    /// returns `true` if yes, otherwise `false`
+    fn try_mark_edge_for_triangle(
+        edge: &Edge,
+        t_id: TriangleId,
+        triangles: &mut Triangles,
+    ) -> bool {
+        let triangle = triangles.get(t_id).unwrap();
+        match triangle.edge_index(edge.p, edge.q) {
+            None => {
+                return false;
+            }
+            Some(index) => {
+                let neighbor_t_id = triangle.neighbors[index];
+                if let Some(t) = triangles.get_mut(neighbor_t_id) {
+                    let index = t.edge_index(edge.p, edge.q).unwrap();
+                    t.constrained_edge[index] = true;
+                }
+
+                triangles.get_mut_unchecked(t_id).constrained_edge[index] = true;
+
+                true
+            }
+        }
+    }
+
+    fn fill_edge_event(
+        edge: EdgeEvent,
+        node_point: Point,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        if edge.right {
+            Self::fill_right_above_edge_event(
+                &edge,
+                node_point,
+                points,
+                triangles,
+                advancing_front,
+                map,
+            );
+        } else {
+            unimplemented!()
+        }
+    }
+
+    fn fill_right_above_edge_event(
+        edge: &EdgeEvent,
+        node_point: Point,
+
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        while let Some((next_node_point, next_node)) = advancing_front.next_node(node_point) {
+            if next_node_point.x >= edge.p.x {
+                break;
+            }
+
+            // check if next node is below the edge
+            if orient_2d(edge.p, next_node_point, edge.q).is_ccw() {
+                Self::fill_right_below_edge_event(
+                    edge,
+                    node_point,
+                    points,
+                    triangles,
+                    advancing_front,
+                    map,
+                );
+            } else {
+                // try next node
+                continue;
+            }
+        }
+    }
+
+    fn fill_right_below_edge_event(
+        edge: &EdgeEvent,
+        node_point: Point,
+
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        if node_point.x < edge.p.x {
+            // todo: fixme
+            let (next_node_point, _) = advancing_front.next_node(node_point).unwrap();
+            let (next_next_node_point, _) = advancing_front.next_node(next_node_point).unwrap();
+
+            if orient_2d(node_point, next_node_point, next_next_node_point).is_ccw() {
+                // concave
+                Self::fill_right_concave_edge_event(
+                    edge,
+                    node_point,
+                    points,
+                    triangles,
+                    advancing_front,
+                    map,
+                );
+            } else {
+                // convex
+                Self::fill_right_convex_edge_event(
+                    edge,
+                    node_point,
+                    points,
+                    triangles,
+                    advancing_front,
+                    map,
+                );
+
+                // retry this one
+                Self::fill_right_below_edge_event(
+                    edge,
+                    node_point,
+                    points,
+                    triangles,
+                    advancing_front,
+                    map,
+                );
+            }
+        }
+    }
+
+    /// recursively fill concave nodes
+    fn fill_right_concave_edge_event(
+        edge: &EdgeEvent,
+        node_point: Point,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        let (node_next_point, next_node) = advancing_front.next_node(node_point).unwrap();
+        let next_node_point_id = next_node.point_id;
+        Self::fill(node_next_point, points, triangles, advancing_front, map);
+
+        if next_node_point_id != edge.p_id() {
+            // next above or below edge?
+            if orient_2d(edge.q, node_next_point, edge.p).is_ccw() {
+                //  below
+                let next_next_point = advancing_front.next_node(node_next_point).unwrap().0;
+                if orient_2d(node_point, node_next_point, next_next_point).is_ccw() {
+                    // next is concave
+                    Self::fill_right_concave_edge_event(
+                        edge,
+                        node_point,
+                        points,
+                        triangles,
+                        advancing_front,
+                        map,
+                    );
+                } else {
+                    // next is convex
+                }
+            }
+        }
+    }
+
+    fn fill_right_convex_edge_event(
+        edge: &EdgeEvent,
+        node_point: Point,
+
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+        let (next_node_point, _) = advancing_front.next_node(node_point).unwrap();
+        let (next_next_node_point, _) = advancing_front.next_node(next_node_point).unwrap();
+        let (next_next_next_node_point, _) =
+            advancing_front.next_node(next_next_node_point).unwrap();
+        // next concave or convex?
+        if orient_2d(
+            next_node_point,
+            next_next_node_point,
+            next_next_next_node_point,
+        )
+        .is_ccw()
+        {
+            // concave
+            Self::fill_right_concave_edge_event(
+                edge,
+                node_point,
+                points,
+                triangles,
+                advancing_front,
+                map,
+            );
+        } else {
+            // convex
+            // next above or below edge?
+            if orient_2d(edge.q, next_next_node_point, edge.p).is_ccw() {
+                // Below
+                Self::fill_right_convex_edge_event(
+                    edge,
+                    next_node_point,
+                    points,
+                    triangles,
+                    advancing_front,
+                    map,
+                );
+            } else {
+                // Above
+            }
+        }
     }
 }
 

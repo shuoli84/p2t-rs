@@ -283,6 +283,18 @@ impl Triangle {
     pub fn clear_neighbors(&mut self) {
         self.neighbors = [TriangleId::INVALID; 3];
     }
+
+    pub fn edge_index(&self, p: PointId, q: PointId) -> Option<usize> {
+        let p_index = self.point_index(p);
+        let q_index = self.point_index(q);
+
+        Some(match (p_index, q_index) {
+            (0, 1) | (1, 0) => 2,
+            (1, 2) | (2, 1) => 0,
+            (0, 2) | (2, 0) => 1,
+            _ => return None,
+        })
+    }
 }
 
 #[cfg(test)]
