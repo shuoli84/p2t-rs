@@ -12,7 +12,7 @@ use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::{in_circle, orient_2d};
 
-use crate::advancing_front::LocateNode;
+use crate::{advancing_front::LocateNode, utils::is_scan_area};
 
 pub use points::PointId;
 
@@ -105,8 +105,6 @@ impl SweepContext {
 /// Point event related methods
 impl SweepContext {
     fn point_event(point_id: PointId, point: Point, context: &mut FillContext) {
-        println!("point event: {point:?}");
-
         match context.advancing_front.locate_node(point.x) {
             None => {
                 unreachable!()
@@ -154,7 +152,7 @@ impl SweepContext {
                 let p = triangle.points[i];
                 let op = ot.opposite_point(&triangle, p);
 
-                let oi = ot.point_index(op);
+                let oi = ot.point_index(op).unwrap();
 
                 // if this is a constrained edge or a delaunay edge(only during recursive legalization)
                 // then we should not try to legalize
@@ -241,7 +239,7 @@ impl SweepContext {
 
         // rotate shared edge one vertex cw to legalize it
         triangles.legalize(triangle_id, p, op);
-        triangles.legalize(ot_id, p, op);
+        triangles.legalize(ot_id, op, p);
 
         let t = triangles.get_mut_unchecked(triangle_id);
         t.set_delunay_edge_cw(p, de2);
@@ -716,8 +714,7 @@ impl SweepContext {
         let o1 = orient_2d(edge.q, context.points.get_point(point_id).unwrap(), edge.q);
 
         if o1.is_collinear() {
-            if triangle.contains(edge.q_id()) && triangle.contains(p1) {
-                let edge_index = triangle.edge_index(edge.q_id(), point_id).unwrap();
+            if let Some(edge_index) = triangle.edge_index(edge.q_id(), p1) {
                 let neighbor_across_t = triangle.neighbor_across(point_id);
                 context
                     .triangles
@@ -772,7 +769,7 @@ impl SweepContext {
             Self::edge_event_for_point(edge, triangle_id, point_id, context);
         } else {
             // this triangle crosses constraint so let's flippin start!
-            // flip edge event
+            Self::flip_edge_event(edge, triangle_id, point_id, context);
         }
     }
 }
@@ -782,6 +779,27 @@ struct FillContext<'a> {
     triangles: &'a mut Triangles,
     advancing_front: &'a mut AdvancingFront,
     map: &'a mut FxHashSet<TriangleId>,
+}
+
+/// flip edge related methods
+impl SweepContext {
+    fn flip_edge_event(
+        edge: &EdgeEvent,
+        triangle_id: TriangleId,
+        point_id: PointId,
+        context: &mut FillContext,
+    ) {
+        let t = context.triangles.get(triangle_id).unwrap();
+
+        let ot = t.neighbor_across(point_id);
+        assert!(!ot.invalid(), "neighbor must be valid");
+
+        let ot = context.triangles.get(ot).unwrap();
+        let op = ot.opposite_point(t, point_id);
+
+        // is scan area?
+        // is_scan_area(a, b, c, d)
+    }
 }
 
 struct Basin {
@@ -925,11 +943,9 @@ mod tests {
             Point::new(0., 0.),
             Point::new(2., 0.),
             Point::new(1., 4.),
-            Point::new(0., 4.),
+            // Point::new(0., 4.),
         ];
         let mut context = SweepContext::new(polyline);
-        dbg!(&context);
-
         context.triangulate();
     }
 }

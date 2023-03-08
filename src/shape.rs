@@ -125,15 +125,15 @@ impl Triangle {
     }
 
     /// get point index
-    pub fn point_index(&self, point: PointId) -> usize {
+    pub fn point_index(&self, point: PointId) -> Option<usize> {
         if self.points[0] == point {
-            0
+            Some(0)
         } else if self.points[1] == point {
-            1
+            Some(1)
         } else if self.points[2] == point {
-            2
+            Some(2)
         } else {
-            panic!("point not belongs to triangle");
+            None
         }
     }
 
@@ -217,7 +217,7 @@ impl Triangle {
 
     /// neighbor counter clockwise to given point
     pub fn neighbor_across(&self, p: PointId) -> TriangleId {
-        self.neighbors[self.point_index(p)]
+        self.neighbors[self.point_index(p).unwrap()]
     }
 
     /// Legalize triangle by rotating clockwise around `old_point`
@@ -235,6 +235,7 @@ impl Triangle {
             self.points[2] = self.points[1];
             self.points[1] = new_point;
         } else {
+            println!("triangle: {self:?} old_point: {old_point:?}");
             panic!("point not belongs to triangle")
         }
     }
@@ -248,6 +249,7 @@ impl Triangle {
         } else if p == self.points[2] {
             self.delaunay_edge[1]
         } else {
+            println!("triangle: {self:?} point: {p:?}");
             panic!("point not belongs to triangle");
         }
     }
@@ -290,8 +292,8 @@ impl Triangle {
     }
 
     pub fn edge_index(&self, p: PointId, q: PointId) -> Option<usize> {
-        let p_index = self.point_index(p);
-        let q_index = self.point_index(q);
+        let p_index = self.point_index(p)?;
+        let q_index = self.point_index(q)?;
 
         Some(match (p_index, q_index) {
             (0, 1) | (1, 0) => 2,

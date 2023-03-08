@@ -75,14 +75,6 @@ impl Triangles {
         self.get_mut_unchecked(id).constrained_edge[index] = val;
     }
 
-    pub fn set_delunay_edge_ccw(&mut self, id: TriangleId, p: PointId, val: bool) {
-        self.get_mut_unchecked(id).set_delunay_edge_ccw(p, val);
-    }
-
-    pub fn set_delunay_edge_cw(&mut self, id: TriangleId, p: PointId, val: bool) {
-        self.get_mut_unchecked(id).set_delunay_edge_cw(p, val);
-    }
-
     pub fn legalize(&mut self, id: TriangleId, o_point: PointId, n_point: PointId) {
         self.get_mut_unchecked(id).legalize(o_point, n_point);
     }
