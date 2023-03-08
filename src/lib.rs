@@ -453,10 +453,12 @@ impl SweepContext {
         Self::fill_edge_event(
             edge_event,
             node_point,
-            points,
-            triangles,
-            advancing_front,
-            map,
+            &mut FillContext {
+                points,
+                triangles,
+                advancing_front,
+                map,
+            },
         );
     }
 
@@ -486,31 +488,24 @@ impl SweepContext {
         }
     }
 
-    fn fill_edge_event(
-        edge: EdgeEvent,
-        node_point: Point,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) {
+    fn fill_edge_event(edge: EdgeEvent, node_point: Point, context: &mut FillContext) {
         if edge.right {
             Self::fill_right_above_edge_event(
                 &edge,
                 node_point,
-                points,
-                triangles,
-                advancing_front,
-                map,
+                &context.points,
+                &mut context.triangles,
+                &mut context.advancing_front,
+                &mut context.map,
             );
         } else {
-            unimplemented!()
+            Self::fill_left_above_edge_event(&edge, node_point, context);
         }
     }
 
     fn fill_right_above_edge_event(
         edge: &EdgeEvent,
-        node_point: Point,
+        mut node_point: Point,
 
         points: &Points,
         triangles: &mut Triangles,
@@ -534,6 +529,7 @@ impl SweepContext {
                 );
             } else {
                 // try next node
+                node_point = next_node_point;
                 continue;
             }
         }
@@ -649,14 +645,102 @@ impl SweepContext {
         }
     }
 
-    fn fill_left_below_edge_event(
+    fn fill_left_above_edge_event(
+        edge: &EdgeEvent,
+        mut node_point: Point,
+        context: &mut FillContext,
+    ) {
+        while let Some((prev_node_point, _)) = context.advancing_front.prev_node(node_point) {
+            // check if next node is below the edge
+            if prev_node_point.x <= edge.p.x {
+                break;
+            }
+
+            if orient_2d(edge.q, prev_node_point, edge.p).is_cw() {
+                Self::fill_left_below_edge_event(edge, node_point, context);
+            } else {
+                node_point = prev_node_point;
+            }
+        }
+    }
+
+    fn fill_left_below_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
+        if node_point.x > edge.p.x {
+            let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
+            let (prev_prev_node_point, _) =
+                context.advancing_front.prev_node(prev_node_point).unwrap();
+            if orient_2d(node_point, prev_node_point, prev_prev_node_point).is_cw() {
+                Self::fill_left_concave_edge_event(edge, node_point, context);
+            } else {
+                // convex
+                Self::fill_left_convex_edge_event(edge, node_point, context);
+
+                // retry this one
+                Self::fill_left_below_edge_event(edge, node_point, context);
+            }
+        }
+    }
+
+    fn fill_left_convex_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
+        // next concave or convex?
+        let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
+        let (prev_prev_node_point, _) = context.advancing_front.prev_node(prev_node_point).unwrap();
+        let (prev_prev_prev_node_point, _) = context
+            .advancing_front
+            .prev_node(prev_prev_node_point)
+            .unwrap();
+
+        if orient_2d(
+            prev_node_point,
+            prev_prev_node_point,
+            prev_prev_prev_node_point,
+        )
+        .is_cw()
+        {
+            // concave
+            Self::fill_left_concave_edge_event(edge, prev_node_point, context);
+        } else {
+            // convex
+            // next above or below edge?
+            if orient_2d(edge.q, prev_prev_node_point, edge.p).is_cw() {
+                // below
+                Self::fill_left_convex_edge_event(edge, node_point, context);
+            } else {
+                // above
+            }
+        }
+    }
+
+    fn fill_left_concave_edge_event(
         edge: &EdgeEvent,
         node_point: Point,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
+        context: &mut FillContext,
     ) {
+        let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
+        Self::fill(
+            prev_node_point,
+            context.points,
+            context.triangles,
+            context.advancing_front,
+            context.map,
+        );
+
+        let (prev_node_point, prev_node) = context.advancing_front.prev_node(node_point).unwrap();
+
+        if prev_node.point_id != edge.p_id() {
+            // next above or below edge?
+            if orient_2d(edge.q, prev_node_point, edge.p).is_cw() {
+                // below
+                let (prev_prev_node_point, _) =
+                    context.advancing_front.prev_node(prev_node_point).unwrap();
+                if orient_2d(node_point, prev_node_point, prev_prev_node_point).is_cw() {
+                    // next is concave
+                    Self::fill_left_concave_edge_event(edge, node_point, context);
+                } else {
+                    // next is convex
+                }
+            }
+        }
     }
 }
 
