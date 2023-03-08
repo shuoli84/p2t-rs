@@ -86,25 +86,17 @@ impl SweepContext {
     }
 
     fn sweep_points(&mut self, mut advancing_front: AdvancingFront) {
+        let mut context = FillContext {
+            points: &self.points,
+            triangles: &mut self.triangles,
+            advancing_front: &mut advancing_front,
+            map: &mut self.map,
+        };
         for (point_id, point) in self.points.iter_point_by_y(1) {
-            Self::point_event(
-                point_id,
-                point,
-                &mut advancing_front,
-                &mut self.triangles,
-                &mut self.map,
-                &self.points,
-            );
+            Self::point_event(point_id, point, &mut context);
             for p in self.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
-                Self::edge_event(
-                    edge,
-                    point,
-                    &self.points,
-                    &mut self.triangles,
-                    &mut advancing_front,
-                    &mut self.map,
-                );
+                Self::edge_event(edge, point, &mut context);
             }
         }
     }
@@ -112,62 +104,53 @@ impl SweepContext {
 
 /// Point event related methods
 impl SweepContext {
-    fn point_event(
-        point_id: PointId,
-        point: Point,
-        advancing_front: &mut AdvancingFront,
-        triangles: &mut Triangles,
-        map: &mut FxHashSet<TriangleId>,
-        points: &Points,
-    ) {
+    fn point_event(point_id: PointId, point: Point, context: &mut FillContext) {
         println!("point event: {point:?}");
 
-        match advancing_front.locate_node(point.x) {
+        match context.advancing_front.locate_node(point.x) {
             None => {
                 unreachable!()
             }
             Some(LocateNode::Middle((node_point, node)) | LocateNode::Left((node_point, node))) => {
-                let (_, right) = advancing_front.next_node(node_point).unwrap();
+                let (_, right) = context.advancing_front.next_node(node_point).unwrap();
 
-                let triangle =
-                    triangles.insert(Triangle::new(point_id, node.point_id, right.point_id));
+                let triangle = context.triangles.insert(Triangle::new(
+                    point_id,
+                    node.point_id,
+                    right.point_id,
+                ));
                 let node_triangle = node.triangle.unwrap();
-                triangles.mark_neighbor(node_triangle, triangle);
-                map.insert(triangle);
-                advancing_front.insert(point_id, point, triangle);
+                context.triangles.mark_neighbor(node_triangle, triangle);
+                context.map.insert(triangle);
+                context.advancing_front.insert(point_id, point, triangle);
 
-                if !Self::legalize(triangle, points, triangles, advancing_front) {
-                    Self::map_triangle_to_nodes(triangle, triangles, advancing_front, points)
+                if !Self::legalize(triangle, context) {
+                    Self::map_triangle_to_nodes(triangle, context)
                 }
 
                 // in middle case, the node's x should be less than point'x
                 // in left case, they are same.
                 if point.x <= node_point.x + f64::EPSILON {
-                    Self::fill(node_point, points, triangles, advancing_front, map);
+                    Self::fill(node_point, context);
                 }
 
-                Self::fill_advancing_front(point, points, triangles, advancing_front, map);
+                Self::fill_advancing_front(point, context);
             }
         }
     }
 
     /// returns whether it is changed
-    fn legalize(
-        triangle_id: TriangleId,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-    ) -> bool {
+    fn legalize(triangle_id: TriangleId, context: &mut FillContext) -> bool {
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
         for i in 0..3 {
-            let triangle = triangles.get(triangle_id).unwrap();
+            let triangle = context.triangles.get(triangle_id).unwrap();
             if triangle.delaunay_edge[i] {
                 continue;
             }
 
             let ot_id = triangle.neighbors[i];
-            if let Some(ot) = triangles.get(ot_id) {
+            if let Some(ot) = context.triangles.get(ot_id) {
                 let p = triangle.points[i];
                 let op = ot.opposite_point(&triangle, p);
 
@@ -176,48 +159,50 @@ impl SweepContext {
                 // if this is a constrained edge or a delaunay edge(only during recursive legalization)
                 // then we should not try to legalize
                 if ot.constrained_edge[oi] || ot.delaunay_edge[oi] {
-                    triangles.set_constrained(triangle_id, i, ot.constrained_edge[oi]);
+                    context
+                        .triangles
+                        .set_constrained(triangle_id, i, ot.constrained_edge[oi]);
                     continue;
                 }
 
                 // all point id is maintained by points.
                 let inside = unsafe {
                     in_circle(
-                        points.get_point_uncheck(p),
-                        points.get_point_uncheck(triangle.point_ccw(p)),
-                        points.get_point_uncheck(triangle.point_cw(p)),
-                        points.get_point_uncheck(op),
+                        context.points.get_point_uncheck(p),
+                        context.points.get_point_uncheck(triangle.point_ccw(p)),
+                        context.points.get_point_uncheck(triangle.point_cw(p)),
+                        context.points.get_point_uncheck(op),
                     )
                 };
 
                 if inside {
                     // first mark this shared edge as delaunay
-                    triangles.get_mut_unchecked(triangle_id).delaunay_edge[i] = true;
-                    triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = true;
+                    context
+                        .triangles
+                        .get_mut_unchecked(triangle_id)
+                        .delaunay_edge[i] = true;
+                    context.triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = true;
 
                     // rotate shared edge one vertex cw to legalize it
-                    Self::rotate_triangle_pair(triangle_id, p, ot_id, op, triangles);
+                    Self::rotate_triangle_pair(triangle_id, p, ot_id, op, context.triangles);
 
                     // We now got one valid Delaunay Edge shared by two triangles
                     // This gives us 4 new edges to check for Delaunay
-                    let not_legalized =
-                        !Self::legalize(triangle_id, points, triangles, advancing_front);
+                    let not_legalized = !Self::legalize(triangle_id, context);
                     if not_legalized {
-                        Self::map_triangle_to_nodes(
-                            triangle_id,
-                            triangles,
-                            advancing_front,
-                            points,
-                        );
+                        Self::map_triangle_to_nodes(triangle_id, context);
                     }
 
-                    let not_legalized = !Self::legalize(ot_id, points, triangles, advancing_front);
+                    let not_legalized = !Self::legalize(ot_id, context);
                     if not_legalized {
-                        Self::map_triangle_to_nodes(ot_id, triangles, advancing_front, points);
+                        Self::map_triangle_to_nodes(ot_id, context);
                     }
 
-                    triangles.get_mut_unchecked(triangle_id).delaunay_edge[i] = false;
-                    triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = false;
+                    context
+                        .triangles
+                        .get_mut_unchecked(triangle_id)
+                        .delaunay_edge[i] = false;
+                    context.triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = false;
 
                     // If triangle have been legalized no need to check the other edges since
                     // the recursive legalization will handles those so we can end here.
@@ -289,19 +274,15 @@ impl SweepContext {
     }
 
     /// update advancing front node's triangle
-    fn map_triangle_to_nodes(
-        triangle_id: TriangleId,
-        triangles: &Triangles,
-        advancing_front: &mut AdvancingFront,
-        points: &Points,
-    ) {
-        let triangle = triangles.get(triangle_id).unwrap();
+    fn map_triangle_to_nodes(triangle_id: TriangleId, context: &mut FillContext) {
+        let triangle = context.triangles.get(triangle_id).unwrap();
         for i in 0..3 {
             if triangle.neighbors[i].invalid() {
-                let point = points
+                let point = context
+                    .points
                     .get_point(triangle.point_cw(triangle.points[i]))
                     .expect("should exist");
-                if let Some(node) = advancing_front.locate_point_mut(point) {
+                if let Some(node) = context.advancing_front.locate_point_mut(point) {
                     node.triangle = Some(triangle_id);
                 }
             }
@@ -309,76 +290,64 @@ impl SweepContext {
     }
 
     // todo: now advancing_front didn't delete the filled node
-    fn fill(
-        node_point: Point,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) {
+    fn fill(node_point: Point, context: &mut FillContext) {
         // all following nodes exists for sure
-        let node = advancing_front.get_node(node_point).unwrap();
-        let prev_node = advancing_front.prev_node(node_point).unwrap();
-        let next_node = advancing_front.next_node(node_point).unwrap();
+        let node = context.advancing_front.get_node(node_point).unwrap();
+        let prev_node = context.advancing_front.prev_node(node_point).unwrap();
+        let next_node = context.advancing_front.next_node(node_point).unwrap();
 
-        let triangle_id = triangles.insert(Triangle::new(
+        let triangle_id = context.triangles.insert(Triangle::new(
             prev_node.1.point_id,
             node.point_id,
             next_node.1.point_id,
         ));
 
         if let Some(prev_tri) = prev_node.1.triangle {
-            triangles.mark_neighbor(triangle_id, prev_tri);
+            context.triangles.mark_neighbor(triangle_id, prev_tri);
         }
         if let Some(node_tri) = node.triangle {
-            triangles.mark_neighbor(triangle_id, node_tri);
+            context.triangles.mark_neighbor(triangle_id, node_tri);
         }
-        map.insert(triangle_id);
+        context.map.insert(triangle_id);
 
-        if !Self::legalize(triangle_id, points, triangles, advancing_front) {
-            Self::map_triangle_to_nodes(triangle_id, triangles, advancing_front, points);
+        if !Self::legalize(triangle_id, context) {
+            Self::map_triangle_to_nodes(triangle_id, context);
         }
     }
 
-    fn fill_advancing_front(
-        node_point: Point,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) {
+    fn fill_advancing_front(node_point: Point, context: &mut FillContext) {
         // fill right holes
-        while let Some((node_point, _)) = advancing_front.next_node(node_point) {
-            if advancing_front.next_node(node_point).is_some() {
+        while let Some((node_point, _)) = context.advancing_front.next_node(node_point) {
+            if context.advancing_front.next_node(node_point).is_some() {
                 // if HoleAngle exceeds 90 degrees then break
-                if Self::large_hole_dont_fill(node_point, &advancing_front) {
+                if Self::large_hole_dont_fill(node_point, &context.advancing_front) {
                     break;
                 }
 
-                Self::fill(node_point, points, triangles, advancing_front, map);
+                Self::fill(node_point, context);
             } else {
                 break;
             }
         }
 
         // fill left holes
-        while let Some((node_point, _)) = advancing_front.prev_node(node_point) {
-            if advancing_front.prev_node(node_point).is_some() {
+        while let Some((node_point, _)) = context.advancing_front.prev_node(node_point) {
+            if context.advancing_front.prev_node(node_point).is_some() {
                 // if HoleAngle exceeds 90 degrees then break
-                if Self::large_hole_dont_fill(node_point, &advancing_front) {
+                if Self::large_hole_dont_fill(node_point, &context.advancing_front) {
                     break;
                 }
 
-                Self::fill(node_point, points, triangles, advancing_front, map);
+                Self::fill(node_point, context);
             } else {
                 break;
             }
         }
 
         // file right basins
-        if let Some(basin_angle) = Self::basin_angle(node_point, advancing_front) {
+        if let Some(basin_angle) = Self::basin_angle(node_point, context.advancing_front) {
             if basin_angle < std::f64::consts::FRAC_PI_4 * 3. {
-                Self::fill_basin(node_point, points, triangles, advancing_front, map);
+                Self::fill_basin(node_point, context);
             }
         }
     }
@@ -423,16 +392,9 @@ impl EdgeEvent {
 
 /// EdgeEvent related methods
 impl SweepContext {
-    fn edge_event(
-        edge: Edge,
-        node_point: Point,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) {
-        let p = points.get_point(edge.p).unwrap();
-        let q = points.get_point(edge.q).unwrap();
+    fn edge_event(edge: Edge, node_point: Point, context: &mut FillContext) {
+        let p = context.points.get_point(edge.p).unwrap();
+        let q = context.points.get_point(edge.q).unwrap();
         let edge_event = EdgeEvent {
             constrained_edge: edge,
             p,
@@ -441,25 +403,16 @@ impl SweepContext {
         };
         println!("edge event: {edge_event:?}");
 
-        let node = advancing_front.get_node(node_point).unwrap();
+        let node = context.advancing_front.get_node(node_point).unwrap();
 
         if let Some(triangle) = node.triangle {
-            if Self::try_mark_edge_for_triangle(&edge, triangle, triangles) {
+            if Self::try_mark_edge_for_triangle(&edge, triangle, context.triangles) {
                 return;
             }
         }
 
         // for now we will do all needed filling
-        Self::fill_edge_event(
-            edge_event,
-            node_point,
-            &mut FillContext {
-                points,
-                triangles,
-                advancing_front,
-                map,
-            },
-        );
+        Self::fill_edge_event(edge_event, node_point, context);
     }
 
     /// try mark edge for triangle if the constrained edge already is a edge
@@ -585,13 +538,7 @@ impl SweepContext {
     ) {
         let (node_next_point, next_node) = context.advancing_front.next_node(node_point).unwrap();
         let next_node_point_id = next_node.point_id;
-        Self::fill(
-            node_next_point,
-            context.points,
-            context.triangles,
-            context.advancing_front,
-            context.map,
-        );
+        Self::fill(node_next_point, context);
 
         if next_node_point_id != edge.p_id() {
             // next above or below edge?
@@ -717,13 +664,7 @@ impl SweepContext {
         context: &mut FillContext,
     ) {
         let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
-        Self::fill(
-            prev_node_point,
-            context.points,
-            context.triangles,
-            context.advancing_front,
-            context.map,
-        );
+        Self::fill(prev_node_point, context);
 
         let (prev_node_point, prev_node) = context.advancing_front.prev_node(node_point).unwrap();
 
@@ -771,16 +712,9 @@ impl SweepContext {
 
     /// basin is like a bowl, we first identify it's left, bottom, right node.
     /// then fill it
-    fn fill_basin(
-        node_point: Point,
-
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) -> Option<()> {
-        let next_node = advancing_front.next_node(node_point)?;
-        let next_next_node = advancing_front.next_node(next_node.0)?;
+    fn fill_basin(node_point: Point, context: &mut FillContext) -> Option<()> {
+        let next_node = context.advancing_front.next_node(node_point)?;
+        let next_next_node = context.advancing_front.next_node(next_node.0)?;
 
         // find the left
         let left: Point;
@@ -792,7 +726,7 @@ impl SweepContext {
 
         // find the bottom
         let mut bottom: Point = left;
-        while let Some((next_node_point, _)) = advancing_front.next_node(bottom) {
+        while let Some((next_node_point, _)) = context.advancing_front.next_node(bottom) {
             if bottom.y >= next_node_point.y {
                 bottom = next_node_point;
             } else {
@@ -807,7 +741,7 @@ impl SweepContext {
 
         // find the right
         let mut right = bottom;
-        while let Some((next_node_point, _)) = advancing_front.next_node(right) {
+        while let Some((next_node_point, _)) = context.advancing_front.next_node(right) {
             if bottom.y < next_node_point.y {
                 right = next_node_point;
             } else {
@@ -830,47 +764,37 @@ impl SweepContext {
                 width,
                 left_higher,
             },
-            points,
-            triangles,
-            advancing_front,
-            map,
+            context,
         );
 
         Some(())
     }
 
-    fn fill_basin_req(
-        node: Point,
-        basin: Basin,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) -> Option<()> {
+    fn fill_basin_req(node: Point, basin: Basin, context: &mut FillContext) -> Option<()> {
         if Self::is_shallow(node, &basin) {
             // stop fill if basin is shallow
             return None;
         }
 
-        Self::fill(node, points, triangles, advancing_front, map);
+        Self::fill(node, context);
 
         // find the next node to fill
-        let prev_point = advancing_front.prev_node(node)?.0;
-        let next_point = advancing_front.next_node(node)?.0;
+        let prev_point = context.advancing_front.prev_node(node)?.0;
+        let next_point = context.advancing_front.next_node(node)?.0;
 
         if prev_point.eq(&basin.left) && next_point.eq(&basin.right) {
             return Some(());
         }
 
         let new_node = if prev_point.eq(&basin.left) {
-            let next_next_point = advancing_front.next_node(next_point)?.0;
+            let next_next_point = context.advancing_front.next_node(next_point)?.0;
             if orient_2d(node, next_point, next_next_point).is_cw() {
                 return None;
             }
 
             next_point
         } else if next_point.eq(&basin.right) {
-            let prev_prev_point = advancing_front.prev_node(prev_point)?.0;
+            let prev_prev_point = context.advancing_front.prev_node(prev_point)?.0;
             if orient_2d(node, prev_point, prev_prev_point).is_ccw() {
                 return None;
             }
@@ -885,7 +809,7 @@ impl SweepContext {
             }
         };
 
-        Self::fill_basin_req(new_node, basin, points, triangles, advancing_front, map)
+        Self::fill_basin_req(new_node, basin, context)
     }
 
     fn is_shallow(node: Point, basin: &Basin) -> bool {
