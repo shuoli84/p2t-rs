@@ -517,7 +517,7 @@ impl SweepContext {
         advancing_front: &mut AdvancingFront,
         map: &mut FxHashSet<TriangleId>,
     ) {
-        while let Some((next_node_point, next_node)) = advancing_front.next_node(node_point) {
+        while let Some((next_node_point, _)) = advancing_front.next_node(node_point) {
             if next_node_point.x >= edge.p.x {
                 break;
             }
@@ -548,31 +548,25 @@ impl SweepContext {
         advancing_front: &mut AdvancingFront,
         map: &mut FxHashSet<TriangleId>,
     ) {
+        let mut context = FillContext {
+            points,
+            triangles,
+            advancing_front,
+            map,
+        };
+
         if node_point.x < edge.p.x {
             // todo: fixme
-            let (next_node_point, _) = advancing_front.next_node(node_point).unwrap();
-            let (next_next_node_point, _) = advancing_front.next_node(next_node_point).unwrap();
+            let (next_node_point, _) = context.advancing_front.next_node(node_point).unwrap();
+            let (next_next_node_point, _) =
+                context.advancing_front.next_node(next_node_point).unwrap();
 
             if orient_2d(node_point, next_node_point, next_next_node_point).is_ccw() {
                 // concave
-                Self::fill_right_concave_edge_event(
-                    edge,
-                    node_point,
-                    points,
-                    triangles,
-                    advancing_front,
-                    map,
-                );
+                Self::fill_right_concave_edge_event(edge, node_point, &mut context);
             } else {
                 // convex
-                Self::fill_right_convex_edge_event(
-                    edge,
-                    node_point,
-                    points,
-                    triangles,
-                    advancing_front,
-                    map,
-                );
+                Self::fill_right_convex_edge_event(edge, node_point, &mut context);
 
                 // retry this one
                 Self::fill_right_below_edge_event(
@@ -591,30 +585,30 @@ impl SweepContext {
     fn fill_right_concave_edge_event(
         edge: &EdgeEvent,
         node_point: Point,
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
+        context: &mut FillContext,
     ) {
-        let (node_next_point, next_node) = advancing_front.next_node(node_point).unwrap();
+        let (node_next_point, next_node) = context.advancing_front.next_node(node_point).unwrap();
         let next_node_point_id = next_node.point_id;
-        Self::fill(node_next_point, points, triangles, advancing_front, map);
+        Self::fill(
+            node_next_point,
+            context.points,
+            context.triangles,
+            context.advancing_front,
+            context.map,
+        );
 
         if next_node_point_id != edge.p_id() {
             // next above or below edge?
             if orient_2d(edge.q, node_next_point, edge.p).is_ccw() {
                 //  below
-                let next_next_point = advancing_front.next_node(node_next_point).unwrap().0;
+                let next_next_point = context
+                    .advancing_front
+                    .next_node(node_next_point)
+                    .unwrap()
+                    .0;
                 if orient_2d(node_point, node_next_point, next_next_point).is_ccw() {
                     // next is concave
-                    Self::fill_right_concave_edge_event(
-                        edge,
-                        node_point,
-                        points,
-                        triangles,
-                        advancing_front,
-                        map,
-                    );
+                    Self::fill_right_concave_edge_event(edge, node_point, context);
                 } else {
                     // next is convex
                 }
@@ -625,16 +619,14 @@ impl SweepContext {
     fn fill_right_convex_edge_event(
         edge: &EdgeEvent,
         node_point: Point,
-
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
+        context: &mut FillContext,
     ) {
-        let (next_node_point, _) = advancing_front.next_node(node_point).unwrap();
-        let (next_next_node_point, _) = advancing_front.next_node(next_node_point).unwrap();
-        let (next_next_next_node_point, _) =
-            advancing_front.next_node(next_next_node_point).unwrap();
+        let (next_node_point, _) = context.advancing_front.next_node(node_point).unwrap();
+        let (next_next_node_point, _) = context.advancing_front.next_node(next_node_point).unwrap();
+        let (next_next_next_node_point, _) = context
+            .advancing_front
+            .next_node(next_next_node_point)
+            .unwrap();
         // next concave or convex?
         if orient_2d(
             next_node_point,
@@ -644,32 +636,35 @@ impl SweepContext {
         .is_ccw()
         {
             // concave
-            Self::fill_right_concave_edge_event(
-                edge,
-                node_point,
-                points,
-                triangles,
-                advancing_front,
-                map,
-            );
+            Self::fill_right_concave_edge_event(edge, node_point, context);
         } else {
             // convex
             // next above or below edge?
             if orient_2d(edge.q, next_next_node_point, edge.p).is_ccw() {
                 // Below
-                Self::fill_right_convex_edge_event(
-                    edge,
-                    next_node_point,
-                    points,
-                    triangles,
-                    advancing_front,
-                    map,
-                );
+                Self::fill_right_convex_edge_event(edge, next_node_point, context);
             } else {
                 // Above
             }
         }
     }
+
+    fn fill_left_below_edge_event(
+        edge: &EdgeEvent,
+        node_point: Point,
+        points: &Points,
+        triangles: &mut Triangles,
+        advancing_front: &mut AdvancingFront,
+        map: &mut FxHashSet<TriangleId>,
+    ) {
+    }
+}
+
+struct FillContext<'a> {
+    points: &'a Points,
+    triangles: &'a mut Triangles,
+    advancing_front: &'a mut AdvancingFront,
+    map: &'a mut FxHashSet<TriangleId>,
 }
 
 struct Basin {
