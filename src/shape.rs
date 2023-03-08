@@ -215,6 +215,11 @@ impl Triangle {
         }
     }
 
+    /// neighbor counter clockwise to given point
+    pub fn neighbor_across(&self, p: PointId) -> TriangleId {
+        self.neighbors[self.point_index(p)]
+    }
+
     /// Legalize triangle by rotating clockwise around `old_point`
     pub fn legalize(&mut self, old_point: PointId, new_point: PointId) {
         if old_point == self.points[0] {

@@ -388,6 +388,19 @@ impl EdgeEvent {
     fn q_id(&self) -> PointId {
         self.constrained_edge.q
     }
+
+    /// create a new EdgeEvent with new p
+    fn with_q(&self, point_id: PointId, point: Point) -> Self {
+        EdgeEvent {
+            constrained_edge: Edge {
+                p: self.constrained_edge.p,
+                q: point_id,
+            },
+            p: self.p,
+            q: point,
+            right: self.p.x > point.x,
+        }
+    }
 }
 
 /// EdgeEvent related methods
@@ -409,10 +422,11 @@ impl SweepContext {
             if Self::try_mark_edge_for_triangle(&edge, triangle, context.triangles) {
                 return;
             }
-        }
 
-        // for now we will do all needed filling
-        Self::fill_edge_event(edge_event, node_point, context);
+            // for now we will do all needed filling
+            Self::fill_edge_event(&edge_event, node_point, context);
+            Self::edge_event_for_point(&edge_event, triangle, edge.q, context);
+        }
     }
 
     /// try mark edge for triangle if the constrained edge already is a edge
@@ -441,10 +455,10 @@ impl SweepContext {
         }
     }
 
-    fn fill_edge_event(edge: EdgeEvent, node_point: Point, context: &mut FillContext) {
+    fn fill_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
         if edge.right {
             Self::fill_right_above_edge_event(
-                &edge,
+                edge,
                 node_point,
                 &context.points,
                 &mut context.triangles,
@@ -452,7 +466,7 @@ impl SweepContext {
                 &mut context.map,
             );
         } else {
-            Self::fill_left_above_edge_event(&edge, node_point, context);
+            Self::fill_left_above_edge_event(edge, node_point, context);
         }
     }
 
@@ -681,6 +695,84 @@ impl SweepContext {
                     // next is convex
                 }
             }
+        }
+    }
+
+    fn edge_event_for_point(
+        edge: &EdgeEvent,
+        triangle_id: TriangleId,
+        point_id: PointId,
+        context: &mut FillContext,
+    ) {
+        assert!(!triangle_id.invalid());
+
+        if Self::try_mark_edge_for_triangle(&edge.constrained_edge, triangle_id, context.triangles)
+        {
+            return;
+        }
+
+        let triangle = context.triangles.get(triangle_id).unwrap();
+        let p1 = triangle.point_ccw(point_id);
+        let o1 = orient_2d(edge.q, context.points.get_point(point_id).unwrap(), edge.q);
+
+        if o1.is_collinear() {
+            if triangle.contains(edge.q_id()) && triangle.contains(p1) {
+                let edge_index = triangle.edge_index(edge.q_id(), point_id).unwrap();
+                let neighbor_across_t = triangle.neighbor_across(point_id);
+                context
+                    .triangles
+                    .get_mut(triangle_id)
+                    .unwrap()
+                    .constrained_edge[edge_index] = true;
+
+                Self::edge_event_for_point(
+                    &edge.with_q(p1, context.points.get_point(p1).unwrap()),
+                    neighbor_across_t,
+                    p1,
+                    context,
+                );
+                return;
+            } else {
+                panic!("EdgeEvent - collinear points not supported")
+            }
+        }
+
+        let p2 = triangle.point_cw(point_id);
+        let o2 = orient_2d(edge.q, context.points.get_point(p2).unwrap(), edge.p);
+        if o2.is_collinear() {
+            if let Some(edge_index) = triangle.edge_index(edge.q_id(), p2) {
+                let neighbor_across_t = triangle.neighbor_across(point_id);
+                context
+                    .triangles
+                    .get_mut(triangle_id)
+                    .unwrap()
+                    .constrained_edge[edge_index] = true;
+                Self::edge_event_for_point(
+                    &edge.with_q(p2, context.points.get_point(p2).unwrap()),
+                    neighbor_across_t,
+                    point_id,
+                    context,
+                );
+
+                return;
+            } else {
+                panic!("collinear points not supported");
+            }
+        }
+
+        if o1 == o2 {
+            // need to decide if we are rotating cw or ccw to get to a triangle
+            // that will cross edge
+            let triangle_id = if o1.is_cw() {
+                triangle.neighbor_ccw(point_id)
+            } else {
+                triangle.neighbor_cw(point_id)
+            };
+
+            Self::edge_event_for_point(edge, triangle_id, point_id, context);
+        } else {
+            // this triangle crosses constraint so let's flippin start!
+            // flip edge event
         }
     }
 }
