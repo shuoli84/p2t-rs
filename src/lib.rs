@@ -9,7 +9,6 @@ use advancing_front::AdvancingFront;
 use context::Context;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
-use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::{in_circle, orient_2d, Orientation};
@@ -51,7 +50,6 @@ impl SweeperBuilder {
             points: self.points,
             edges: self.edges_builder.build(),
             triangles: Triangles::new(),
-            map: Default::default(),
         }
     }
 }
@@ -86,7 +84,6 @@ pub struct Sweeper {
     points: Points,
     edges: Edges,
     triangles: Triangles,
-    map: FxHashSet<TriangleId>,
 }
 
 impl Sweeper {
@@ -116,7 +113,6 @@ impl Sweeper {
             triangles: &mut self.triangles,
             advancing_front: &mut advancing_front,
             edges: &self.edges,
-            map: &mut self.map,
             result: Vec::new(),
         };
 
@@ -208,7 +204,6 @@ impl Sweeper {
                 .insert(Triangle::new(point_id, node.point_id, right.point_id));
         let node_triangle = node.triangle.unwrap();
         context.triangles.mark_neighbor(node_triangle, triangle);
-        context.map.insert(triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
         if !Self::legalize(triangle, context) {
@@ -411,7 +406,6 @@ impl Sweeper {
         if let Some(node_tri) = node.triangle {
             context.triangles.mark_neighbor(triangle_id, node_tri);
         }
-        context.map.insert(triangle_id);
         context
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
@@ -762,9 +756,9 @@ impl Sweeper {
         let triangle = context.triangles.get(triangle_id).unwrap();
         let p1 = triangle.point_ccw(point_id);
         let o1 = orient_2d(
-            eq.get(&context.points).unwrap(),
-            p1.get(&context.points).unwrap(),
-            ep.get(&context.points).unwrap(),
+            eq.get(&context.points),
+            p1.get(&context.points),
+            ep.get(&context.points),
         );
 
         if o1.is_collinear() {
@@ -830,18 +824,18 @@ impl Sweeper {
     ) {
         assert!(!triangle_id.invalid());
 
-        let t = context.triangles.get(triangle_id).unwrap();
+        let t = context.triangles.get_unchecked(triangle_id);
 
         let ot_id = t.neighbor_across(p);
         assert!(!ot_id.invalid(), "neighbor must be valid");
-        let ot = context.triangles.get(ot_id).unwrap();
+        let ot = context.triangles.get_unchecked(ot_id);
 
         let op = ot.opposite_point(t, p);
         if in_scan_area(
-            p.get(&context.points).unwrap(),
-            t.point_ccw(p).get(&context.points).unwrap(),
-            t.point_cw(p).get(&context.points).unwrap(),
-            op.get(&context.points).unwrap(),
+            p.get(&context.points),
+            t.point_ccw(p).get(&context.points),
+            t.point_cw(p).get(&context.points),
+            op.get(&context.points),
         ) {
             // lets rotate shared edge one vertex cw
             Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles);
@@ -870,9 +864,9 @@ impl Sweeper {
                 }
             } else {
                 let o = orient_2d(
-                    eq.get(&context.points).unwrap(),
-                    op.get(&context.points).unwrap(),
-                    ep.get(&context.points).unwrap(),
+                    eq.get(&context.points),
+                    op.get(&context.points),
+                    ep.get(&context.points),
                 );
 
                 let t = Self::next_flip_triangle(o, triangle_id, ot_id, p, op, context);
@@ -930,12 +924,12 @@ impl Sweeper {
         context: &mut Context,
     ) -> PointId {
         let o2d = orient_2d(
-            eq.get(&context.points).unwrap(),
-            op.get(&context.points).unwrap(),
-            ep.get(&context.points).unwrap(),
+            eq.get(&context.points),
+            op.get(&context.points),
+            ep.get(&context.points),
         );
 
-        let ot = context.triangles.get(ot).unwrap();
+        let ot = context.triangles.get_unchecked(ot);
         match o2d {
             Orientation::CW => {
                 // right
@@ -972,10 +966,10 @@ impl Sweeper {
         let p2 = flip_triangle.point_cw(eq);
 
         if in_scan_area(
-            eq.get(&context.points).unwrap(),
-            p1.get(&context.points).unwrap(),
-            p2.get(&context.points).unwrap(),
-            op.get(&context.points).unwrap(),
+            eq.get(&context.points),
+            p1.get(&context.points),
+            p2.get(&context.points),
+            op.get(&context.points),
         ) {
             // flip with new edge op -> eq
             Self::flip_edge_event(eq, op, edge, ot, op, context);
@@ -1132,23 +1126,8 @@ mod tests {
 
     use super::*;
 
-    fn attach_debugger() {
-        let url = format!(
-            "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','pid':{}}}",
-            std::process::id()
-        );
-        std::process::Command::new("code")
-            .arg("--open-url")
-            .arg(url)
-            .output()
-            .unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1)); // Wait for debugger to attach
-    }
-
     #[test]
     fn test_context() {
-        // attach_debugger();
-
         let polyline = vec![
             Point::new(0., 0.),
             Point::new(200., 0.),
@@ -1164,8 +1143,6 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        attach_debugger();
-
         let mut points = Vec::<Point>::new();
         for _ in 0..100 {
             let x: f64 = rand::thread_rng().gen_range(0.0..800.);

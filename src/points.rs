@@ -7,8 +7,8 @@ use crate::shape::Point;
 pub struct PointId(pub(crate) usize);
 
 impl PointId {
-    pub fn get(&self, points: &Points) -> Option<Point> {
-        points.get_point(*self)
+    pub fn get(&self, points: &Points) -> Point {
+        unsafe { points.get_point_uncheck(*self) }
     }
 
     pub fn as_usize(&self) -> usize {

@@ -1,22 +1,24 @@
 use crate::{AdvancingFront, Edges, Points, TriangleId, Triangles};
-use rustc_hash::FxHashSet;
-use rusttype::Scale;
 
 pub struct Context<'a> {
     pub points: &'a Points,
     pub edges: &'a Edges,
     pub triangles: &'a mut Triangles,
     pub advancing_front: &'a mut AdvancingFront,
-    pub map: &'a mut FxHashSet<TriangleId>,
     pub result: Vec<TriangleId>,
 }
 
 impl Context<'_> {
+    #[cfg(not(target_feature = "draw"))]
+    pub fn draw(&self) {}
+
+    #[cfg(target_feature = "draw")]
     pub fn draw(&self) {
         use image::{Rgb, RgbImage};
         use imageproc::drawing::*;
         use imageproc::rect::Rect;
         use rusttype::Font;
+        use rusttype::Scale;
 
         let red = Rgb([255u8, 0u8, 0u8]);
         let blue = Rgb([0u8, 0u8, 255u8]);

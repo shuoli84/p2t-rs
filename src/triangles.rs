@@ -12,11 +12,7 @@ impl TriangleId {
     }
 
     pub fn get<'a, 'b>(&'a self, triangles: &'b Triangles) -> &'b Triangle {
-        triangles.get(*self).unwrap()
-    }
-
-    pub fn get_mut<'a, 'b>(&'a self, triangles: &'b mut Triangles) -> &'b mut Triangle {
-        triangles.get_mut_unchecked(*self)
+        triangles.get_unchecked(*self)
     }
 
     pub fn as_usize(&self) -> usize {
@@ -51,6 +47,13 @@ impl Triangles {
         unsafe { Some(self.triangles.get_unchecked(id.0)) }
     }
 
+    pub fn get_unchecked(&self, id: TriangleId) -> &Triangle {
+        if id == TriangleId::INVALID {
+            panic!("id should be valid");
+        }
+        unsafe { self.triangles.get_unchecked(id.0) }
+    }
+
     pub fn get_mut(&mut self, id: TriangleId) -> Option<&mut Triangle> {
         self.triangles.get_mut(id.0)
     }
@@ -59,6 +62,7 @@ impl Triangles {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
 
+    #[cfg(target_feature = "draw")]
     pub fn iter(&self) -> impl Iterator<Item = (TriangleId, &Triangle)> {
         self.triangles
             .iter()
