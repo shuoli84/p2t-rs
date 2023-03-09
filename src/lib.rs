@@ -959,7 +959,7 @@ impl FillContext<'_> {
                 y as i32,
                 Scale::uniform(10.),
                 &font,
-                &format!("{}, {}", p.x, p.y),
+                &format!("{:.2}, {:.2}", p.x, p.y),
             );
         }
 
@@ -1145,6 +1145,8 @@ impl SweepContext {
 
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
+
     use super::*;
 
     #[test]
@@ -1159,6 +1161,21 @@ mod tests {
         ];
         let mut context = SweepContext::new(vec![]);
         for point in polyline {
+            context.add_point(point);
+        }
+        context.triangulate();
+    }
+
+    #[test]
+    fn test_context_rand() {
+        let mut points = Vec::<Point>::new();
+        for i in 0..100 {
+            let x: f64 = rand::thread_rng().gen_range(0.0..800.);
+            let y: f64 = rand::thread_rng().gen_range(0.0..800.);
+            points.push(Point::new(x, y));
+        }
+        let mut context = SweepContext::new(vec![]);
+        for point in points {
             context.add_point(point);
         }
         context.triangulate();
