@@ -106,9 +106,12 @@ impl SweepContext {
     fn sweep_points(context: &mut FillContext) {
         for (point_id, point) in context.points.iter_point_by_y(1) {
             Self::point_event(point_id, point, context);
+            context.draw();
+
             for p in context.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
                 Self::edge_event(edge, point, context);
+                context.draw();
             }
         }
     }
@@ -199,8 +202,6 @@ impl SweepContext {
         }
 
         Self::fill_advancing_front(point, context);
-
-        context.draw();
     }
 
     /// returns whether it is changed
@@ -708,7 +709,7 @@ impl SweepContext {
             // next above or below edge?
             if orient_2d(edge.q, prev_prev_node_point, edge.p).is_cw() {
                 // below
-                Self::fill_left_convex_edge_event(edge, node_point, context);
+                Self::fill_left_convex_edge_event(edge, prev_node_point, context);
             } else {
                 // above
             }
@@ -1160,6 +1161,8 @@ mod tests {
 
     #[test]
     fn test_rand() {
+        attach_debugger();
+
         let mut points = Vec::<Point>::new();
         for i in 0..100 {
             let x: f64 = rand::thread_rng().gen_range(0.0..800.);
