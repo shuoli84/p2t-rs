@@ -9,10 +9,10 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
-    #[cfg(not(target_feature = "draw"))]
+    #[cfg(not(feature = "draw"))]
     pub fn draw(&self) {}
 
-    #[cfg(target_feature = "draw")]
+    #[cfg(feature = "draw")]
     pub fn draw(&self) {
         use image::{Rgb, RgbImage};
         use imageproc::drawing::*;

@@ -127,7 +127,7 @@ impl AdvancingFront {
         self.nodes.iter().nth(n).map(|(k, v)| (k.point(), v))
     }
 
-    #[cfg(target_feature = "draw")]
+    #[cfg(feature = "draw")]
     pub fn iter(&self) -> impl Iterator<Item = (Point, &Node)> {
         self.nodes.iter().map(|(p, n)| (p.point(), n))
     }
@@ -145,12 +145,8 @@ impl AdvancingFront {
     pub fn locate_node(&self, x: f64) -> Option<(Point, &Node)> {
         let key = PointKey(Point::new(x, f64::MAX));
         let mut iter = self.nodes.range(..&key).rev();
-        let p1 = iter.next()?;
-        if p1.0 .0.x.eq(&x) {
-            return Some((p1.0.point(), p1.1));
-        } else {
-            return Some((p1.0.point(), p1.1));
-        }
+        let node = iter.next()?;
+        Some((node.0.point(), node.1))
     }
 
     /// get the node identified by `point`
