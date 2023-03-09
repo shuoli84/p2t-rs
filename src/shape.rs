@@ -137,6 +137,13 @@ impl Triangle {
         }
     }
 
+    /// set constrained flag for edge identified by `p` and `q`
+    pub fn set_constrained_for_edge(&mut self, p: PointId, q: PointId) {
+        if let Some(index) = self.edge_index(p, q) {
+            self.constrained_edge[index] = true;
+        }
+    }
+
     /// constrained edge flag for edge `ccw` to given point
     pub fn constrained_edge_ccw(&self, p: PointId) -> bool {
         if p == self.points[0] {
@@ -285,6 +292,10 @@ impl Triangle {
         } else {
             self.delaunay_edge[0] = val;
         }
+    }
+
+    pub fn clear_delaunay_edges(&mut self) {
+        self.delaunay_edge = [false; 3];
     }
 
     pub fn clear_neighbors(&mut self) {

@@ -10,6 +10,14 @@ impl TriangleId {
     pub fn invalid(&self) -> bool {
         self.0 == Self::INVALID.0
     }
+
+    pub fn get<'a, 'b>(&'a self, triangles: &'b Triangles) -> &'b Triangle {
+        triangles.get(*self).unwrap()
+    }
+
+    pub fn get_mut<'a, 'b>(&'a self, triangles: &'b mut Triangles) -> &'b mut Triangle {
+        triangles.get_mut_unchecked(*self)
+    }
 }
 
 /// Triangle store, store triangles and their neighborhood relations

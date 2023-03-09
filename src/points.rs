@@ -6,6 +6,12 @@ use crate::shape::Point;
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PointId(pub(crate) usize);
 
+impl PointId {
+    pub fn get(&self, points: &Points) -> Option<Point> {
+        points.get_point(*self)
+    }
+}
+
 /// Point store, provide a unique [`PointId`]
 #[derive(Debug, Default)]
 pub struct Points {

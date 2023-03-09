@@ -12,9 +12,9 @@ use points::Points;
 use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
-use utils::{in_circle, orient_2d};
+use utils::{in_circle, orient_2d, Orientation};
 
-use crate::utils::is_scan_area;
+use crate::utils::in_scan_area;
 
 pub use points::PointId;
 
@@ -488,19 +488,6 @@ impl EdgeEvent {
     fn q_id(&self) -> PointId {
         self.constrained_edge.q
     }
-
-    /// create a new EdgeEvent with new p
-    fn with_q(&self, point_id: PointId, point: Point) -> Self {
-        EdgeEvent {
-            constrained_edge: Edge {
-                p: self.constrained_edge.p,
-                q: point_id,
-            },
-            p: self.p,
-            q: point,
-            right: self.p.x > point.x,
-        }
-    }
 }
 
 /// EdgeEvent related methods
@@ -525,7 +512,7 @@ impl SweepContext {
 
             // for now we will do all needed filling
             Self::fill_edge_event(&edge_event, node_point, context);
-            Self::edge_event_for_point(&edge_event, triangle, edge.q, context);
+            Self::edge_event_for_point(edge.p, edge.q, &edge_event, triangle, edge.q, context);
         }
     }
 
@@ -760,6 +747,8 @@ impl SweepContext {
     }
 
     fn edge_event_for_point(
+        ep: PointId,
+        eq: PointId,
         edge: &EdgeEvent,
         triangle_id: TriangleId,
         point_id: PointId,
@@ -785,12 +774,7 @@ impl SweepContext {
                     .unwrap()
                     .constrained_edge[edge_index] = true;
 
-                Self::edge_event_for_point(
-                    &edge.with_q(p1, context.points.get_point(p1).unwrap()),
-                    neighbor_across_t,
-                    p1,
-                    context,
-                );
+                Self::edge_event_for_point(ep, p1, &edge, neighbor_across_t, p1, context);
                 return;
             } else {
                 panic!("EdgeEvent - collinear points not supported")
@@ -807,12 +791,7 @@ impl SweepContext {
                     .get_mut(triangle_id)
                     .unwrap()
                     .constrained_edge[edge_index] = true;
-                Self::edge_event_for_point(
-                    &edge.with_q(p2, context.points.get_point(p2).unwrap()),
-                    neighbor_across_t,
-                    point_id,
-                    context,
-                );
+                Self::edge_event_for_point(ep, p2, &edge, neighbor_across_t, point_id, context);
 
                 return;
             } else {
@@ -829,10 +808,10 @@ impl SweepContext {
                 triangle.neighbor_cw(point_id)
             };
 
-            Self::edge_event_for_point(edge, triangle_id, point_id, context);
+            Self::edge_event_for_point(ep, eq, edge, triangle_id, point_id, context);
         } else {
             // this triangle crosses constraint so let's flippin start!
-            Self::flip_edge_event(edge, triangle_id, point_id, context);
+            Self::flip_edge_event(ep, eq, edge, triangle_id, point_id, context);
         }
     }
 }
@@ -840,21 +819,177 @@ impl SweepContext {
 /// flip edge related methods
 impl SweepContext {
     fn flip_edge_event(
+        ep: PointId,
+        eq: PointId,
         edge: &EdgeEvent,
         triangle_id: TriangleId,
-        point_id: PointId,
+        p: PointId,
         context: &mut FillContext,
     ) {
+        assert!(!triangle_id.invalid());
+
         let t = context.triangles.get(triangle_id).unwrap();
 
-        let ot = t.neighbor_across(point_id);
-        assert!(!ot.invalid(), "neighbor must be valid");
+        let ot_id = t.neighbor_across(p);
+        assert!(!ot_id.invalid(), "neighbor must be valid");
+        let ot = context.triangles.get(ot_id).unwrap();
+
+        let op = ot.opposite_point(t, p);
+        if in_scan_area(
+            p.get(&context.points).unwrap(),
+            t.point_ccw(p).get(&context.points).unwrap(),
+            t.point_cw(p).get(&context.points).unwrap(),
+            op.get(&context.points).unwrap(),
+        ) {
+            // lets rotate shared edge one vertex cw
+            Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles);
+            Self::map_triangle_to_nodes(triangle_id, context);
+            Self::map_triangle_to_nodes(ot_id, context);
+
+            if p == eq && op == ep {
+                if eq == edge.q_id() && ep == edge.p_id() {
+                    context
+                        .triangles
+                        .get_mut(triangle_id)
+                        .unwrap()
+                        .set_constrained_for_edge(ep, eq);
+
+                    context
+                        .triangles
+                        .get_mut(ot_id)
+                        .unwrap()
+                        .set_constrained_for_edge(ep, eq);
+
+                    Self::legalize(triangle_id, context);
+                    Self::legalize(ot_id, context);
+                } else {
+                    // original comment: I think one of the triangles should be legalized here?
+                    // todo: figure this out
+                }
+            } else {
+                let o = orient_2d(
+                    eq.get(&context.points).unwrap(),
+                    op.get(&context.points).unwrap(),
+                    ep.get(&context.points).unwrap(),
+                );
+
+                let t = Self::next_flip_triangle(o, triangle_id, ot_id, p, op, context);
+                Self::flip_edge_event(ep, eq, edge, t, p, context);
+            }
+        } else {
+            let new_p = Self::next_flip_point(ep, eq, ot_id, op, context);
+            Self::flip_scan_edge_event(ep, eq, edge, triangle_id, ot_id, new_p, context);
+            Self::edge_event_for_point(ep, eq, edge, triangle_id, p, context);
+        }
+    }
+
+    fn next_flip_triangle(
+        o: Orientation,
+        t: TriangleId,
+        ot: TriangleId,
+        p: PointId,
+        op: PointId,
+        context: &mut FillContext,
+    ) -> TriangleId {
+        if o.is_ccw() {
+            // ot is not crossing edge after flip
+            let edge_index = context
+                .triangles
+                .get(ot)
+                .unwrap()
+                .edge_index(p, op)
+                .unwrap();
+            context.triangles.get_mut_unchecked(ot).delaunay_edge[edge_index] = true;
+            Self::legalize(ot, context);
+            context
+                .triangles
+                .get_mut_unchecked(ot)
+                .clear_delaunay_edges();
+            t
+        } else {
+            // t is not crossing edge after flip
+            let edge_index = context.triangles.get(t).unwrap().edge_index(p, op).unwrap();
+            context.triangles.get_mut_unchecked(t).delaunay_edge[edge_index] = true;
+            Self::legalize(t, context);
+            context
+                .triangles
+                .get_mut_unchecked(t)
+                .clear_delaunay_edges();
+
+            ot
+        }
+    }
+
+    fn next_flip_point(
+        ep: PointId,
+        eq: PointId,
+        ot: TriangleId,
+        op: PointId,
+        context: &mut FillContext,
+    ) -> PointId {
+        let o2d = orient_2d(
+            eq.get(&context.points).unwrap(),
+            op.get(&context.points).unwrap(),
+            ep.get(&context.points).unwrap(),
+        );
 
         let ot = context.triangles.get(ot).unwrap();
-        let op = ot.opposite_point(t, point_id);
+        match o2d {
+            Orientation::CW => {
+                // right
+                ot.point_ccw(op)
+            }
+            Orientation::CCW => {
+                // left
+                ot.point_cw(op)
+            }
+            Orientation::Collinear => {
+                panic!("Opposing point on constrained edge");
+            }
+        }
+    }
 
-        // is scan area?
-        // is_scan_area(a, b, c, d)
+    fn flip_scan_edge_event(
+        ep: PointId,
+        eq: PointId,
+        edge: &EdgeEvent,
+        flip_triangle_id: TriangleId,
+        t_id: TriangleId,
+        p: PointId,
+        context: &mut FillContext,
+    ) {
+        let t = t_id.get(&context.triangles);
+        let ot = t.neighbor_across(p);
+        if ot.invalid() {
+            panic!("flip_scan_edge_event - null neighbor across");
+        }
+
+        let op = ot.get(&context.triangles).opposite_point(t, p);
+        let flip_triangle = flip_triangle_id.get(&context.triangles);
+        let p1 = flip_triangle.point_ccw(eq);
+        let p2 = flip_triangle.point_cw(eq);
+
+        if in_scan_area(
+            eq.get(&context.points).unwrap(),
+            p1.get(&context.points).unwrap(),
+            p2.get(&context.points).unwrap(),
+            op.get(&context.points).unwrap(),
+        ) {
+            // flip with new edge op -> eq
+            Self::flip_edge_event(eq, op, edge, ot, op, context);
+
+            // original comment:
+            // TODO: Actually I just figured out that it should be possible to
+            //       improve this by getting the next ot and op before the the above
+            //       flip and continue the flipScanEdgeEvent here
+            // set new ot and op here and loop back to inScanArea test
+            // also need to set a new flip_triangle first
+            // Turns out at first glance that this is somewhat complicated
+            // so it will have to wait.
+        } else {
+            let new_p = Self::next_flip_point(ep, eq, ot, op, context);
+            Self::flip_scan_edge_event(ep, eq, edge, flip_triangle_id, ot, new_p, context);
+        }
     }
 }
 

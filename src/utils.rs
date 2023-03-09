@@ -84,7 +84,7 @@ pub fn in_circle(pa: Point, pb: Point, pc: Point, pd: Point) -> bool {
     det > 0.
 }
 
-pub fn is_scan_area(a: Point, b: Point, c: Point, d: Point) -> bool {
+pub fn in_scan_area(a: Point, b: Point, c: Point, d: Point) -> bool {
     let oadb = (a.x - b.x) * (d.y - b.y) - (d.x - b.x) * (a.y - b.y);
     if oadb >= -f64::EPSILON {
         return false;
