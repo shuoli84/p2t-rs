@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 rustc-hash = "1.1"
 ordered-float = "3.0"
+imageproc = "0.23"
+image = "0.24"
+rusttype = "0.9"

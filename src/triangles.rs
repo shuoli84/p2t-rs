@@ -47,6 +47,10 @@ impl Triangles {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &Triangle> {
+        self.triangles.iter()
+    }
+
     /// mark two triangle as neighbor
     pub fn mark_neighbor(&mut self, left: TriangleId, right: TriangleId) {
         let left_triangle = self.get(left).unwrap().clone();

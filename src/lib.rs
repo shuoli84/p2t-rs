@@ -8,11 +8,12 @@ use advancing_front::AdvancingFront;
 use edge::Edges;
 use points::Points;
 use rustc_hash::FxHashSet;
+use rusttype::Scale;
 use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::{in_circle, orient_2d};
 
-use crate::{advancing_front::LocateNode, utils::is_scan_area};
+use crate::utils::is_scan_area;
 
 pub use points::PointId;
 
@@ -31,26 +32,30 @@ impl SweepContext {
         let edges = {
             let mut edge_list = vec![];
 
-            let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
-            let first_point = point_iter.next().expect("empty polyline");
+            if polyline.is_empty() {
+                Edges::new(vec![])
+            } else {
+                let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
+                let first_point = point_iter.next().expect("empty polyline");
 
-            let mut last_point = first_point;
-            loop {
-                match point_iter.next() {
-                    Some(p2) => {
-                        let edge = Edge::new(last_point, p2);
-                        edge_list.push(edge);
-                        last_point = p2;
-                    }
-                    None => {
-                        let edge = Edge::new(last_point, first_point);
-                        edge_list.push(edge);
-                        break;
+                let mut last_point = first_point;
+                loop {
+                    match point_iter.next() {
+                        Some(p2) => {
+                            let edge = Edge::new(last_point, p2);
+                            edge_list.push(edge);
+                            last_point = p2;
+                        }
+                        None => {
+                            let edge = Edge::new(last_point, first_point);
+                            edge_list.push(edge);
+                            break;
+                        }
                     }
                 }
-            }
 
-            Edges::new(edge_list)
+                Edges::new(edge_list)
+            }
         };
 
         Self {
@@ -102,110 +107,136 @@ impl SweepContext {
     }
 }
 
+// first need to visualize each step, then trouble shoot
+// print detailed steps, like what changes this going to address.
+
 /// Point event related methods
 impl SweepContext {
     fn point_event(point_id: PointId, point: Point, context: &mut FillContext) {
-        match context.advancing_front.locate_node(point.x) {
-            None => {
-                unreachable!()
-            }
-            Some(LocateNode::Middle((node_point, node)) | LocateNode::Left((node_point, node))) => {
-                let (_, right) = context.advancing_front.next_node(node_point).unwrap();
+        println!("\npoint event: {point_id:?} {point:?}");
+        context.debug();
 
-                let triangle = context.triangles.insert(Triangle::new(
-                    point_id,
-                    node.point_id,
-                    right.point_id,
-                ));
-                let node_triangle = node.triangle.unwrap();
-                context.triangles.mark_neighbor(node_triangle, triangle);
-                context.map.insert(triangle);
-                context.advancing_front.insert(point_id, point, triangle);
+        let (node_point, node) = context.advancing_front.locate_node(point.x).unwrap();
+        let (_, right) = context.advancing_front.next_node(node_point).unwrap();
 
-                if !Self::legalize(triangle, context) {
-                    Self::map_triangle_to_nodes(triangle, context)
-                }
+        let triangle =
+            context
+                .triangles
+                .insert(Triangle::new(point_id, node.point_id, right.point_id));
+        let node_triangle = node.triangle.unwrap();
+        context.triangles.mark_neighbor(node_triangle, triangle);
+        context.map.insert(triangle);
+        context.advancing_front.insert(point_id, point, triangle);
 
-                // in middle case, the node's x should be less than point'x
-                // in left case, they are same.
-                if point.x <= node_point.x + f64::EPSILON {
-                    Self::fill(node_point, context);
-                }
+        println!("node_triangle added");
+        context.debug();
 
-                Self::fill_advancing_front(point, context);
-            }
+        if !Self::legalize(triangle, context) {
+            Self::map_triangle_to_nodes(triangle, context)
         }
+
+        // in middle case, the node's x should be less than point'x
+        // in left case, they are same.
+        if point.x <= node_point.x + f64::EPSILON {
+            Self::fill(node_point, context);
+
+            // in this case, the advancing node should be deleted, as it is covered by new point
+            context.advancing_front.delete(node_point);
+        }
+
+        Self::fill_advancing_front(point, context);
+
+        context.debug_with_msg("after point event");
+        context.draw();
     }
 
     /// returns whether it is changed
     fn legalize(triangle_id: TriangleId, context: &mut FillContext) -> bool {
+        println!("legalize {:?}", triangle_id);
+        context.debug();
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
-        for i in 0..3 {
+        for point_idx in 0..3 {
             let triangle = context.triangles.get(triangle_id).unwrap();
-            if triangle.delaunay_edge[i] {
+            if triangle.delaunay_edge[point_idx] {
                 continue;
             }
 
-            let ot_id = triangle.neighbors[i];
-            if let Some(ot) = context.triangles.get(ot_id) {
-                let p = triangle.points[i];
-                let op = ot.opposite_point(&triangle, p);
+            let opposite_triangle_id = triangle.neighbors[point_idx];
+            let Some(opposite_triangle) = context.triangles.get(opposite_triangle_id) else {
+                continue;
+            };
 
-                let oi = ot.point_index(op).unwrap();
+            let p = triangle.points[point_idx];
+            let op = opposite_triangle.opposite_point(&triangle, p);
 
-                // if this is a constrained edge or a delaunay edge(only during recursive legalization)
-                // then we should not try to legalize
-                if ot.constrained_edge[oi] || ot.delaunay_edge[oi] {
-                    context
-                        .triangles
-                        .set_constrained(triangle_id, i, ot.constrained_edge[oi]);
-                    continue;
+            let oi = opposite_triangle.point_index(op).unwrap();
+
+            // if this is a constrained edge or a delaunay edge(only during recursive legalization)
+            // then we should not try to legalize
+            if opposite_triangle.constrained_edge[oi] || opposite_triangle.delaunay_edge[oi] {
+                context.triangles.set_constrained(
+                    triangle_id,
+                    point_idx,
+                    opposite_triangle.constrained_edge[oi],
+                );
+                continue;
+            }
+
+            let inside = unsafe {
+                in_circle(
+                    context.points.get_point_uncheck(p),
+                    context.points.get_point_uncheck(triangle.point_ccw(p)),
+                    context.points.get_point_uncheck(triangle.point_cw(p)),
+                    context.points.get_point_uncheck(op),
+                )
+            };
+
+            if inside {
+                // first mark this shared edge as delaunay
+                context
+                    .triangles
+                    .get_mut_unchecked(triangle_id)
+                    .delaunay_edge[point_idx] = true;
+                context
+                    .triangles
+                    .get_mut_unchecked(opposite_triangle_id)
+                    .delaunay_edge[oi] = true;
+
+                // rotate shared edge one vertex cw to legalize it
+                Self::rotate_triangle_pair(
+                    triangle_id,
+                    p,
+                    opposite_triangle_id,
+                    op,
+                    context.triangles,
+                );
+                context.debug_with_msg("after rotate pair");
+
+                // We now got one valid Delaunay Edge shared by two triangles
+                // This gives us 4 new edges to check for Delaunay
+                let not_legalized = !Self::legalize(triangle_id, context);
+                if not_legalized {
+                    Self::map_triangle_to_nodes(triangle_id, context);
                 }
 
-                // all point id is maintained by points.
-                let inside = unsafe {
-                    in_circle(
-                        context.points.get_point_uncheck(p),
-                        context.points.get_point_uncheck(triangle.point_ccw(p)),
-                        context.points.get_point_uncheck(triangle.point_cw(p)),
-                        context.points.get_point_uncheck(op),
-                    )
-                };
-
-                if inside {
-                    // first mark this shared edge as delaunay
-                    context
-                        .triangles
-                        .get_mut_unchecked(triangle_id)
-                        .delaunay_edge[i] = true;
-                    context.triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = true;
-
-                    // rotate shared edge one vertex cw to legalize it
-                    Self::rotate_triangle_pair(triangle_id, p, ot_id, op, context.triangles);
-
-                    // We now got one valid Delaunay Edge shared by two triangles
-                    // This gives us 4 new edges to check for Delaunay
-                    let not_legalized = !Self::legalize(triangle_id, context);
-                    if not_legalized {
-                        Self::map_triangle_to_nodes(triangle_id, context);
-                    }
-
-                    let not_legalized = !Self::legalize(ot_id, context);
-                    if not_legalized {
-                        Self::map_triangle_to_nodes(ot_id, context);
-                    }
-
-                    context
-                        .triangles
-                        .get_mut_unchecked(triangle_id)
-                        .delaunay_edge[i] = false;
-                    context.triangles.get_mut_unchecked(ot_id).delaunay_edge[oi] = false;
-
-                    // If triangle have been legalized no need to check the other edges since
-                    // the recursive legalization will handles those so we can end here.
-                    return true;
+                let not_legalized = !Self::legalize(opposite_triangle_id, context);
+                if not_legalized {
+                    Self::map_triangle_to_nodes(opposite_triangle_id, context);
                 }
+
+                context
+                    .triangles
+                    .get_mut_unchecked(triangle_id)
+                    .delaunay_edge[point_idx] = false;
+                context
+                    .triangles
+                    .get_mut_unchecked(opposite_triangle_id)
+                    .delaunay_edge[oi] = false;
+
+                // If triangle have been legalized no need to check the other edges since
+                // the recursive legalization will handles those so we can end here.
+                return true;
             }
         }
 
@@ -287,9 +318,10 @@ impl SweepContext {
         }
     }
 
-    // todo: now advancing_front didn't delete the filled node
     fn fill(node_point: Point, context: &mut FillContext) {
-        // all following nodes exists for sure
+        context.debug_with_msg(format!("fill {node_point:?}").as_str());
+
+        // safety: all following nodes exists for sure
         let node = context.advancing_front.get_node(node_point).unwrap();
         let prev_node = context.advancing_front.prev_node(node_point).unwrap();
         let next_node = context.advancing_front.next_node(node_point).unwrap();
@@ -311,34 +343,48 @@ impl SweepContext {
         if !Self::legalize(triangle_id, context) {
             Self::map_triangle_to_nodes(triangle_id, context);
         }
+
+        // this node is shadowed by new triangle, delete it from advancing front
+        context.advancing_front.delete(node_point);
     }
 
     fn fill_advancing_front(node_point: Point, context: &mut FillContext) {
-        // fill right holes
-        while let Some((node_point, _)) = context.advancing_front.next_node(node_point) {
-            if context.advancing_front.next_node(node_point).is_some() {
-                // if HoleAngle exceeds 90 degrees then break
-                if Self::large_hole_dont_fill(node_point, &context.advancing_front) {
+        context.debug_with_msg("fill advancing front");
+
+        {
+            // fill right holes
+            let mut node_point = node_point;
+            while let Some((next_node_point, _)) = context.advancing_front.next_node(node_point) {
+                if context.advancing_front.next_node(next_node_point).is_some() {
+                    // if HoleAngle exceeds 90 degrees then break
+                    if Self::large_hole_dont_fill(next_node_point, &context.advancing_front) {
+                        break;
+                    }
+
+                    Self::fill(next_node_point, context);
+                    node_point = next_node_point;
+                } else {
                     break;
                 }
-
-                Self::fill(node_point, context);
-            } else {
-                break;
             }
         }
 
-        // fill left holes
-        while let Some((node_point, _)) = context.advancing_front.prev_node(node_point) {
-            if context.advancing_front.prev_node(node_point).is_some() {
-                // if HoleAngle exceeds 90 degrees then break
-                if Self::large_hole_dont_fill(node_point, &context.advancing_front) {
+        {
+            // fill left holes
+            let mut node_point = node_point;
+
+            while let Some((prev_node_point, _)) = context.advancing_front.prev_node(node_point) {
+                if context.advancing_front.prev_node(prev_node_point).is_some() {
+                    // if HoleAngle exceeds 90 degrees then break
+                    if Self::large_hole_dont_fill(prev_node_point, &context.advancing_front) {
+                        break;
+                    }
+
+                    Self::fill(prev_node_point, context);
+                    node_point = prev_node_point;
+                } else {
                     break;
                 }
-
-                Self::fill(node_point, context);
-            } else {
-                break;
             }
         }
 
@@ -781,6 +827,170 @@ struct FillContext<'a> {
     map: &'a mut FxHashSet<TriangleId>,
 }
 
+impl FillContext<'_> {
+    fn debug_with_msg(&self, msg: &str) {
+        println!("vv {msg}");
+        self.debug();
+    }
+
+    fn debug(&self) {
+        println!("vvvvvvvvvvvvvvvvvvv");
+        print!("  points: ");
+        for p in self.points.iter() {
+            print!("{} ", point_debug(*p));
+        }
+        println!(
+            "h:{} t:{}",
+            point_debug(self.points.head),
+            point_debug(self.points.tail),
+        );
+
+        println!("  triangles:");
+        for t in self.triangles.iter() {
+            println!(
+                "    <{}, {}, {}> ",
+                point_debug(self.points.get_point(t.points[0]).unwrap()),
+                point_debug(self.points.get_point(t.points[1]).unwrap()),
+                point_debug(self.points.get_point(t.points[2]).unwrap()),
+            );
+        }
+        println!("  advancing: {:?}", self.advancing_front);
+
+        fn point_debug(p: Point) -> String {
+            format!("({}, {})", p.x, p.y)
+        }
+    }
+
+    fn draw(&self) {
+        use image::{Rgb, RgbImage};
+        use imageproc::drawing::*;
+        use imageproc::rect::Rect;
+        use rusttype::Font;
+
+        let red = Rgb([255u8, 0u8, 0u8]);
+        let green = Rgb([0u8, 255u8, 0u8]);
+        let blue = Rgb([0u8, 0u8, 255u8]);
+        let white = Rgb([255u8, 255u8, 255u8]);
+        let black = Rgb([0u8, 0, 0]);
+        let gray = Rgb([180u8, 180, 180]);
+        let yellow = Rgb([255u8, 255, 0]);
+
+        let mut image = RgbImage::new(800, 800);
+        image.fill(255);
+
+        let font = Vec::from(include_bytes!("../test_files/DejaVuSans.ttf") as &[u8]);
+        let font = Font::try_from_vec(font).unwrap();
+
+        #[derive(Debug)]
+        struct MapRect {
+            x: f64,
+            y: f64,
+            w: f64,
+            h: f64,
+        }
+
+        #[derive(Debug)]
+        struct Map {
+            from: MapRect,
+            to: MapRect,
+        }
+
+        impl Map {
+            fn map_point(&self, x: f64, y: f64) -> (f64, f64) {
+                let x = (x - self.from.x) / self.from.w * self.to.w + self.to.x;
+                let y = self.to.h - (y - self.from.y) / self.from.h * self.to.h + self.to.y;
+                (x, y)
+            }
+
+            fn map_size(&self, w: f64, h: f64) -> (f64, f64) {
+                (w / self.from.w * self.to.w, h / self.from.h * self.to.h)
+            }
+
+            fn map_to_i32(&self, x: f64, y: f64) -> (i32, i32) {
+                let (x, y) = self.map_point(x, y);
+                (x as i32, y as i32)
+            }
+
+            fn map_to_f32(&self, x: f64, y: f64) -> (f32, f32) {
+                let (x, y) = self.map_point(x, y);
+                (x as f32, y as f32)
+            }
+        }
+
+        let mut min_x = f64::MAX;
+        let mut max_x = f64::MIN;
+        let mut min_y = f64::MAX;
+        let mut max_y = f64::MIN;
+        for p in self
+            .points
+            .iter()
+            .chain(&[self.points.head, self.points.tail])
+        {
+            min_x = min_x.min(p.x);
+            max_x = max_x.max(p.x);
+            min_y = min_y.min(p.y);
+            max_y = max_y.max(p.y);
+        }
+
+        let map = Map {
+            from: MapRect {
+                x: min_x - 30.,
+                y: min_y - 30.,
+                w: max_x - min_x + 60.,
+                h: max_y - min_y + 60.,
+            },
+            to: MapRect {
+                x: 0.,
+                y: 0.,
+                w: 800.,
+                h: 800.,
+            },
+        };
+
+        let point_size = 10.;
+
+        for p in self.points.iter() {
+            let (x, y) = map.map_point(p.x - point_size / 2., p.y + point_size / 2.);
+
+            draw_text_mut(
+                &mut image,
+                red,
+                x as i32,
+                y as i32,
+                Scale::uniform(10.),
+                &font,
+                &format!("{}, {}", p.x, p.y),
+            );
+        }
+
+        for t in self.triangles.iter() {
+            let p0 = self.points.get_point(t.points[0]).unwrap();
+            let p1 = self.points.get_point(t.points[1]).unwrap();
+            let p2 = self.points.get_point(t.points[2]).unwrap();
+
+            let p0 = map.map_to_f32(p0.x, p0.y);
+            let p1 = map.map_to_f32(p1.x, p1.y);
+            let p2 = map.map_to_f32(p2.x, p2.y);
+
+            draw_line_segment_mut(&mut image, p0, p1, blue);
+            draw_line_segment_mut(&mut image, p1, p2, blue);
+            draw_line_segment_mut(&mut image, p2, p0, blue);
+        }
+
+        for (p, _n) in self.advancing_front.iter() {
+            let (x, y) = map.map_to_i32(p.x, p.y);
+            let (w, h) = map.map_size(point_size, point_size);
+            let rect = Rect::at(x as i32, y as i32).of_size(w as u32, h as u32);
+            draw_hollow_rect_mut(&mut image, rect, red);
+        }
+
+        static DRAW_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let draw_id = DRAW_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = format!("test_files/context_dump_{}.png", draw_id);
+        image.save(&path).unwrap();
+    }
+}
+
 /// flip edge related methods
 impl SweepContext {
     fn flip_edge_event(
@@ -941,11 +1151,16 @@ mod tests {
     fn test_context() {
         let polyline = vec![
             Point::new(0., 0.),
-            Point::new(2., 0.),
-            Point::new(1., 4.),
-            // Point::new(0., 4.),
+            Point::new(200., 0.),
+            Point::new(100., 400.),
+            Point::new(0., 400.),
+            Point::new(30., 300.),
+            Point::new(140., 110.),
         ];
-        let mut context = SweepContext::new(polyline);
+        let mut context = SweepContext::new(vec![]);
+        for point in polyline {
+            context.add_point(point);
+        }
         context.triangulate();
     }
 }

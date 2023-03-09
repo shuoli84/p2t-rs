@@ -4,9 +4,18 @@ use crate::{points::Points, shape::Point, triangles::TriangleId, PointId, Triang
 
 /// Advancing front, stores all advancing edges in a btree, this makes store compact
 /// and easier to update
-#[derive(Debug)]
 pub struct AdvancingFront {
     nodes: BTreeMap<PointKey, Node>,
+}
+
+impl std::fmt::Debug for AdvancingFront {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<AdvancingFront ")?;
+        for (p, _) in &self.nodes {
+            write!(f, "({}, {}) ", p.0.x, p.0.y)?;
+        }
+        write!(f, ">")
+    }
 }
 
 #[derive(Debug)]
@@ -107,6 +116,15 @@ impl AdvancingFront {
             },
         );
     }
+
+    /// delete the node identified by `point`
+    pub fn delete(&mut self, point: Point) {
+        self.nodes.remove(&PointKey(point));
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Point, &Node)> {
+        self.nodes.iter().map(|(p, n)| (p.point(), n))
+    }
 }
 
 impl AdvancingFront {
@@ -117,36 +135,15 @@ impl AdvancingFront {
     }
 }
 
-pub enum LocateNode<'a> {
-    Middle((Point, &'a Node)),
-    Left((Point, &'a Node)),
-}
-
-impl LocateNode<'_> {
-    pub fn node(&self) -> &Node {
-        match self {
-            LocateNode::Middle((_, n)) => n,
-            LocateNode::Left((_, n)) => n,
-        }
-    }
-
-    pub fn point(&self) -> Point {
-        match self {
-            LocateNode::Middle((p, _)) => *p,
-            LocateNode::Left((p, _)) => *p,
-        }
-    }
-}
-
 impl AdvancingFront {
-    pub fn locate_node(&self, x: f64) -> Option<LocateNode> {
+    pub fn locate_node(&self, x: f64) -> Option<(Point, &Node)> {
         let key = PointKey(Point::new(x, f64::MAX));
         let mut iter = self.nodes.range(..&key).rev();
         let p1 = iter.next()?;
         if p1.0 .0.x.eq(&x) {
-            return Some(LocateNode::Left((p1.0.point(), p1.1)));
+            return Some((p1.0.point(), p1.1));
         } else {
-            return Some(LocateNode::Middle((p1.0.point(), p1.1)));
+            return Some((p1.0.point(), p1.1));
         }
     }
 
@@ -193,7 +190,7 @@ mod tests {
         let advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
         {
             let p = advancing_front.locate_node(0.).unwrap();
-            let point = p.point();
+            let point = p.0;
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
