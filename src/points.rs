@@ -137,8 +137,11 @@ impl Points {
     }
 
     /// iter all points
-    pub fn iter(&self) -> impl Iterator<Item = &Point> {
-        self.points.iter()
+    pub fn iter(&self) -> impl Iterator<Item = (PointId, &Point)> {
+        self.points
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| (PointId(idx), p))
     }
 }
 

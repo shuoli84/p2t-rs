@@ -6,6 +6,7 @@ mod triangles;
 mod utils;
 use advancing_front::AdvancingFront;
 use edge::Edges;
+use imageproc::hough::draw_polar_lines;
 use points::Points;
 use rustc_hash::FxHashSet;
 use rusttype::Scale;
@@ -95,6 +96,7 @@ impl SweepContext {
             points: &self.points,
             triangles: &mut self.triangles,
             advancing_front: &mut advancing_front,
+            edges: &self.edges,
             map: &mut self.map,
         };
         for (point_id, point) in self.points.iter_point_by_y(1) {
@@ -501,14 +503,7 @@ impl SweepContext {
 
     fn fill_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
         if edge.right {
-            Self::fill_right_above_edge_event(
-                edge,
-                node_point,
-                &context.points,
-                &mut context.triangles,
-                &mut context.advancing_front,
-                &mut context.map,
-            );
+            Self::fill_right_above_edge_event(edge, node_point, context);
         } else {
             Self::fill_left_above_edge_event(edge, node_point, context);
         }
@@ -518,26 +513,16 @@ impl SweepContext {
         edge: &EdgeEvent,
         mut node_point: Point,
 
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
+        context: &mut FillContext,
     ) {
-        while let Some((next_node_point, _)) = advancing_front.next_node(node_point) {
+        while let Some((next_node_point, _)) = context.advancing_front.next_node(node_point) {
             if next_node_point.x >= edge.p.x {
                 break;
             }
 
             // check if next node is below the edge
             if orient_2d(edge.p, next_node_point, edge.q).is_ccw() {
-                Self::fill_right_below_edge_event(
-                    edge,
-                    node_point,
-                    points,
-                    triangles,
-                    advancing_front,
-                    map,
-                );
+                Self::fill_right_below_edge_event(edge, node_point, context);
             } else {
                 // try next node
                 node_point = next_node_point;
@@ -546,22 +531,7 @@ impl SweepContext {
         }
     }
 
-    fn fill_right_below_edge_event(
-        edge: &EdgeEvent,
-        node_point: Point,
-
-        points: &Points,
-        triangles: &mut Triangles,
-        advancing_front: &mut AdvancingFront,
-        map: &mut FxHashSet<TriangleId>,
-    ) {
-        let mut context = FillContext {
-            points,
-            triangles,
-            advancing_front,
-            map,
-        };
-
+    fn fill_right_below_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
         if node_point.x < edge.p.x {
             // todo: fixme
             let (next_node_point, _) = context.advancing_front.next_node(node_point).unwrap();
@@ -570,20 +540,13 @@ impl SweepContext {
 
             if orient_2d(node_point, next_node_point, next_next_node_point).is_ccw() {
                 // concave
-                Self::fill_right_concave_edge_event(edge, node_point, &mut context);
+                Self::fill_right_concave_edge_event(edge, node_point, context);
             } else {
                 // convex
-                Self::fill_right_convex_edge_event(edge, node_point, &mut context);
+                Self::fill_right_convex_edge_event(edge, node_point, context);
 
                 // retry this one
-                Self::fill_right_below_edge_event(
-                    edge,
-                    node_point,
-                    points,
-                    triangles,
-                    advancing_front,
-                    map,
-                );
+                Self::fill_right_below_edge_event(edge, node_point, context);
             }
         }
     }
@@ -822,6 +785,7 @@ impl SweepContext {
 
 struct FillContext<'a> {
     points: &'a Points,
+    edges: &'a Edges,
     triangles: &'a mut Triangles,
     advancing_front: &'a mut AdvancingFront,
     map: &'a mut FxHashSet<TriangleId>,
@@ -836,7 +800,7 @@ impl FillContext<'_> {
     fn debug(&self) {
         println!("vvvvvvvvvvvvvvvvvvv");
         print!("  points: ");
-        for p in self.points.iter() {
+        for (id, p) in self.points.iter() {
             print!("{} ", point_debug(*p));
         }
         println!(
@@ -906,12 +870,12 @@ impl FillContext<'_> {
                 (w / self.from.w * self.to.w, h / self.from.h * self.to.h)
             }
 
-            fn map_to_i32(&self, x: f64, y: f64) -> (i32, i32) {
+            fn map_point_i32(&self, x: f64, y: f64) -> (i32, i32) {
                 let (x, y) = self.map_point(x, y);
                 (x as i32, y as i32)
             }
 
-            fn map_to_f32(&self, x: f64, y: f64) -> (f32, f32) {
+            fn map_point_f32(&self, x: f64, y: f64) -> (f32, f32) {
                 let (x, y) = self.map_point(x, y);
                 (x as f32, y as f32)
             }
@@ -924,6 +888,7 @@ impl FillContext<'_> {
         for p in self
             .points
             .iter()
+            .map(|(_, p)| p)
             .chain(&[self.points.head, self.points.tail])
         {
             min_x = min_x.min(p.x);
@@ -949,8 +914,8 @@ impl FillContext<'_> {
 
         let point_size = 10.;
 
-        for p in self.points.iter() {
-            let (x, y) = map.map_point(p.x - point_size / 2., p.y + point_size / 2.);
+        for (id, point) in self.points.iter() {
+            let (x, y) = map.map_point(point.x - point_size / 2., point.y + point_size / 2.);
 
             draw_text_mut(
                 &mut image,
@@ -959,8 +924,15 @@ impl FillContext<'_> {
                 y as i32,
                 Scale::uniform(10.),
                 &font,
-                &format!("{:.2}, {:.2}", p.x, p.y),
+                &format!("{:.2}, {:.2}", point.x, point.y),
             );
+
+            for p_id in self.edges.p_for_q(id) {
+                let p_point = self.points.get_point(*p_id).unwrap();
+                let p = map.map_point_f32(p_point.x, p_point.y);
+                let q = map.map_point_f32(point.x, point.y);
+                draw_line_segment_mut(&mut image, p, q, yellow);
+            }
         }
 
         for t in self.triangles.iter() {
@@ -968,9 +940,9 @@ impl FillContext<'_> {
             let p1 = self.points.get_point(t.points[1]).unwrap();
             let p2 = self.points.get_point(t.points[2]).unwrap();
 
-            let p0 = map.map_to_f32(p0.x, p0.y);
-            let p1 = map.map_to_f32(p1.x, p1.y);
-            let p2 = map.map_to_f32(p2.x, p2.y);
+            let p0 = map.map_point_f32(p0.x, p0.y);
+            let p1 = map.map_point_f32(p1.x, p1.y);
+            let p2 = map.map_point_f32(p2.x, p2.y);
 
             draw_line_segment_mut(&mut image, p0, p1, blue);
             draw_line_segment_mut(&mut image, p1, p2, blue);
@@ -978,7 +950,7 @@ impl FillContext<'_> {
         }
 
         for (p, _n) in self.advancing_front.iter() {
-            let (x, y) = map.map_to_i32(p.x, p.y);
+            let (x, y) = map.map_point_i32(p.x, p.y);
             let (w, h) = map.map_size(point_size, point_size);
             let rect = Rect::at(x as i32, y as i32).of_size(w as u32, h as u32);
             draw_hollow_rect_mut(&mut image, rect, red);
@@ -1159,15 +1131,12 @@ mod tests {
             Point::new(30., 300.),
             Point::new(140., 110.),
         ];
-        let mut context = SweepContext::new(vec![]);
-        for point in polyline {
-            context.add_point(point);
-        }
+        let mut context = SweepContext::new(polyline);
         context.triangulate();
     }
 
     #[test]
-    fn test_context_rand() {
+    fn test_rand() {
         let mut points = Vec::<Point>::new();
         for i in 0..100 {
             let x: f64 = rand::thread_rng().gen_range(0.0..800.);
