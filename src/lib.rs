@@ -82,30 +82,81 @@ impl SweepContext {
         ));
 
         // create the advancing front with initial triangle
-        let advancing_front = AdvancingFront::new(
+        let mut advancing_front = AdvancingFront::new(
             self.triangles.get(initial_triangle).unwrap(),
             initial_triangle,
             &self.points,
         );
 
-        self.sweep_points(advancing_front);
-    }
-
-    fn sweep_points(&mut self, mut advancing_front: AdvancingFront) {
         let mut context = FillContext {
             points: &self.points,
             triangles: &mut self.triangles,
             advancing_front: &mut advancing_front,
             edges: &self.edges,
             map: &mut self.map,
+            result: Vec::new(),
         };
-        for (point_id, point) in self.points.iter_point_by_y(1) {
-            Self::point_event(point_id, point, &mut context);
-            for p in self.edges.p_for_q(point_id) {
+
+        Self::sweep_points(&mut context);
+        Self::finalize_polygon(&mut context);
+
+        context.draw();
+    }
+
+    fn sweep_points(context: &mut FillContext) {
+        for (point_id, point) in context.points.iter_point_by_y(1) {
+            Self::point_event(point_id, point, context);
+            for p in context.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
-                Self::edge_event(edge, point, &mut context);
+                Self::edge_event(edge, point, context);
             }
         }
+    }
+
+    fn finalize_polygon(context: &mut FillContext) -> Option<()> {
+        // get an internal triangle to start with
+        // the first node is head, artificial point, so skip
+        let (_, node) = context.advancing_front.nth(1)?;
+
+        let mut t = node.triangle?;
+
+        if let Some(tri) = context.triangles.get(t) {
+            if tri.constrained_edge_cw(node.point_id) {
+                t = tri.neighbor_ccw(node.point_id);
+            }
+        }
+
+        if !t.invalid() {
+            Self::clean_mesh(t, context);
+        }
+
+        Some(())
+    }
+
+    fn clean_mesh(triangle_id: TriangleId, context: &mut FillContext) -> Option<()> {
+        let mut triangles = Vec::<TriangleId>::new();
+        triangles.push(triangle_id);
+
+        while let Some(t) = triangles.pop() {
+            if t.invalid() {
+                continue;
+            }
+
+            let tri = context.triangles.get_mut(t).unwrap();
+
+            if !tri.interior {
+                tri.interior = true;
+                context.result.push(t);
+
+                for i in 0..3 {
+                    if !tri.constrained_edge[i] {
+                        triangles.push(tri.neighbors[i]);
+                    }
+                }
+            }
+        }
+
+        Some(())
     }
 }
 
@@ -116,7 +167,6 @@ impl SweepContext {
 impl SweepContext {
     fn point_event(point_id: PointId, point: Point, context: &mut FillContext) {
         println!("\npoint event: {point_id:?} {point:?}");
-        context.debug();
 
         let (node_point, node) = context.advancing_front.locate_node(point.x).unwrap();
         let (_, right) = context.advancing_front.next_node(node_point).unwrap();
@@ -320,13 +370,13 @@ impl SweepContext {
         }
     }
 
-    fn fill(node_point: Point, context: &mut FillContext) {
+    fn fill(node_point: Point, context: &mut FillContext) -> Option<()> {
         context.debug_with_msg(format!("fill {node_point:?}").as_str());
 
         // safety: all following nodes exists for sure
         let node = context.advancing_front.get_node(node_point).unwrap();
-        let prev_node = context.advancing_front.prev_node(node_point).unwrap();
-        let next_node = context.advancing_front.next_node(node_point).unwrap();
+        let prev_node = context.advancing_front.prev_node(node_point)?;
+        let next_node = context.advancing_front.next_node(node_point)?;
 
         let triangle_id = context.triangles.insert(Triangle::new(
             prev_node.1.point_id,
@@ -341,6 +391,9 @@ impl SweepContext {
             context.triangles.mark_neighbor(triangle_id, node_tri);
         }
         context.map.insert(triangle_id);
+        context
+            .advancing_front
+            .insert(prev_node.1.point_id, prev_node.0, triangle_id);
 
         if !Self::legalize(triangle_id, context) {
             Self::map_triangle_to_nodes(triangle_id, context);
@@ -348,6 +401,7 @@ impl SweepContext {
 
         // this node is shadowed by new triangle, delete it from advancing front
         context.advancing_front.delete(node_point);
+        Some(())
     }
 
     fn fill_advancing_front(node_point: Point, context: &mut FillContext) {
@@ -963,9 +1017,14 @@ mod tests {
             let y: f64 = rand::thread_rng().gen_range(0.0..800.);
             points.push(Point::new(x, y));
         }
-        let mut context = SweepContext::new(vec![]);
-        for point in points {
-            context.add_point(point);
+        let mut context = SweepContext::new(vec![
+            Point::new(-10., -10.),
+            Point::new(810., -10.),
+            Point::new(810., 810.),
+            Point::new(-10., 810.),
+        ]);
+        for p in points {
+            context.add_point(p);
         }
         context.triangulate();
     }

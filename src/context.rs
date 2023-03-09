@@ -1,4 +1,7 @@
-use crate::{shape::Point, AdvancingFront, Edges, Points, TriangleId, Triangles};
+use crate::{
+    shape::{Point, Triangle},
+    AdvancingFront, Edges, Points, TriangleId, Triangles,
+};
 use rustc_hash::FxHashSet;
 use rusttype::Scale;
 
@@ -8,6 +11,7 @@ pub struct FillContext<'a> {
     pub triangles: &'a mut Triangles,
     pub advancing_front: &'a mut AdvancingFront,
     pub map: &'a mut FxHashSet<TriangleId>,
+    pub result: Vec<TriangleId>,
 }
 
 impl FillContext<'_> {
@@ -173,6 +177,22 @@ impl FillContext<'_> {
             let (w, h) = map.map_size(point_size, point_size);
             let rect = Rect::at(x as i32, y as i32).of_size(w as u32, h as u32);
             draw_hollow_rect_mut(&mut image, rect, red);
+        }
+
+        for t in &self.result {
+            let t = self.triangles.get(*t).unwrap();
+
+            let p0 = self.points.get_point(t.points[0]).unwrap();
+            let p1 = self.points.get_point(t.points[1]).unwrap();
+            let p2 = self.points.get_point(t.points[2]).unwrap();
+
+            let p0 = map.map_point_f32(p0.x, p0.y);
+            let p1 = map.map_point_f32(p1.x, p1.y);
+            let p2 = map.map_point_f32(p2.x, p2.y);
+
+            draw_line_segment_mut(&mut image, p0, p1, red);
+            draw_line_segment_mut(&mut image, p1, p2, red);
+            draw_line_segment_mut(&mut image, p2, p0, red);
         }
 
         static DRAW_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
