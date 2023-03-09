@@ -1,5 +1,32 @@
 use crate::{Edge, PointId};
 
+pub struct EdgesBuilder {
+    edges_list: Vec<Vec<Edge>>,
+}
+
+impl EdgesBuilder {
+    pub fn new(edges: Vec<Edge>) -> Self {
+        Self {
+            edges_list: vec![edges],
+        }
+    }
+
+    pub fn add_edges(&mut self, edges: Vec<Edge>) -> &mut Self {
+        self.edges_list.push(edges);
+        self
+    }
+
+    pub fn build(self) -> Edges {
+        let mut edges = Vec::with_capacity(self.edges_list.iter().map(|el| el.len()).sum());
+
+        for edges_list_item in self.edges_list {
+            edges.extend(edges_list_item.into_iter());
+        }
+
+        Edges::new(edges)
+    }
+}
+
 /// A compact edge storage for edges. In this algorithm, only store
 /// edge in higher end point, so we just need to store the `lower` point.
 /// Each point may contains 0 or many edges, instead of create a vec

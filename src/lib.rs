@@ -7,7 +7,7 @@ mod triangles;
 mod utils;
 use advancing_front::AdvancingFront;
 use context::FillContext;
-use edge::Edges;
+use edge::{Edges, EdgesBuilder};
 use points::Points;
 use rustc_hash::FxHashSet;
 use shape::*;
@@ -18,55 +18,78 @@ use crate::utils::in_scan_area;
 
 pub use points::PointId;
 
+pub struct SweeperBuilder {
+    edges_builder: EdgesBuilder,
+    points: Points,
+}
+
+impl SweeperBuilder {
+    pub fn new(polyline: Vec<Point>) -> Self {
+        let mut points = Points::new(vec![]);
+
+        let edges = parse_polyline(polyline, &mut points);
+
+        Self {
+            edges_builder: EdgesBuilder::new(edges),
+            points,
+        }
+    }
+
+    pub fn add_point(&mut self, point: Point) -> &mut Self {
+        self.points.add_point(point);
+        self
+    }
+
+    pub fn add_hole(&mut self, polyline: Vec<Point>) -> &mut Self {
+        let edges = parse_polyline(polyline, &mut self.points);
+        self.edges_builder.add_edges(edges);
+        self
+    }
+
+    pub fn build(self) -> Sweeper {
+        Sweeper {
+            points: self.points,
+            edges: self.edges_builder.build(),
+            triangles: Triangles::new(),
+            map: Default::default(),
+        }
+    }
+}
+
+fn parse_polyline(polyline: Vec<Point>, points: &mut Points) -> Vec<Edge> {
+    let mut edge_list = Vec::with_capacity(polyline.len());
+
+    let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
+    let first_point = point_iter.next().expect("empty polyline");
+
+    let mut last_point = first_point;
+    loop {
+        match point_iter.next() {
+            Some(p2) => {
+                let edge = Edge::new(last_point, p2);
+                edge_list.push(edge);
+                last_point = p2;
+            }
+            None => {
+                let edge = Edge::new(last_point, first_point);
+                edge_list.push(edge);
+                break;
+            }
+        }
+    }
+
+    edge_list
+}
+
 #[derive(Debug)]
-pub struct SweepContext {
+pub struct Sweeper {
     points: Points,
     edges: Edges,
     triangles: Triangles,
     map: FxHashSet<TriangleId>,
 }
 
-impl SweepContext {
-    pub fn new(polyline: Vec<Point>) -> Self {
-        let mut points = Points::new(vec![]);
-
-        let edges = {
-            let mut edge_list = vec![];
-
-            if polyline.is_empty() {
-                Edges::new(vec![])
-            } else {
-                let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
-                let first_point = point_iter.next().expect("empty polyline");
-
-                let mut last_point = first_point;
-                loop {
-                    match point_iter.next() {
-                        Some(p2) => {
-                            let edge = Edge::new(last_point, p2);
-                            edge_list.push(edge);
-                            last_point = p2;
-                        }
-                        None => {
-                            let edge = Edge::new(last_point, first_point);
-                            edge_list.push(edge);
-                            break;
-                        }
-                    }
-                }
-
-                Edges::new(edge_list)
-            }
-        };
-
-        Self {
-            points,
-            edges,
-            triangles: Triangles::new(),
-            map: Default::default(),
-        }
-    }
-
+impl Sweeper {
     pub fn add_point(&mut self, point: Point) -> PointId {
         self.points.add_point(point)
     }
@@ -172,7 +195,7 @@ impl SweepContext {
 // print detailed steps, like what changes this going to address.
 
 /// Point event related methods
-impl SweepContext {
+impl Sweeper {
     fn point_event(point_id: PointId, point: Point, context: &mut FillContext) {
         println!("\npoint event: {point_id:?} {point:?}");
 
@@ -487,7 +510,7 @@ impl EdgeEvent {
 }
 
 /// EdgeEvent related methods
-impl SweepContext {
+impl Sweeper {
     fn edge_event(edge: Edge, node_point: Point, context: &mut FillContext) {
         let p = context.points.get_point(edge.p).unwrap();
         let q = context.points.get_point(edge.q).unwrap();
@@ -817,7 +840,7 @@ impl SweepContext {
 }
 
 /// flip edge related methods
-impl SweepContext {
+impl Sweeper {
     fn flip_edge_event(
         ep: PointId,
         eq: PointId,
@@ -1001,7 +1024,7 @@ struct Basin {
 }
 
 /// Basin related methods
-impl SweepContext {
+impl Sweeper {
     fn basin_angle(node_point: Point, advancing_front: &AdvancingFront) -> Option<f64> {
         let (next_point, _) = advancing_front.next_node(node_point)?;
         let (next_next_point, _) = advancing_front.next_node(next_point)?;
@@ -1155,8 +1178,9 @@ mod tests {
             Point::new(30., 300.),
             Point::new(140., 110.),
         ];
-        let mut context = SweepContext::new(polyline);
-        context.triangulate();
+        let mut builder = SweeperBuilder::new(polyline);
+        let mut sweeper = builder.build();
+        sweeper.triangulate();
     }
 
     #[test]
@@ -1169,15 +1193,23 @@ mod tests {
             let y: f64 = rand::thread_rng().gen_range(0.0..800.);
             points.push(Point::new(x, y));
         }
-        let mut context = SweepContext::new(vec![
+        let mut builder = SweeperBuilder::new(vec![
             Point::new(-10., -10.),
             Point::new(810., -10.),
             Point::new(810., 810.),
             Point::new(-10., 810.),
         ]);
         for p in points {
-            context.add_point(p);
+            builder.add_point(p);
         }
-        context.triangulate();
+
+        builder.add_hole(vec![
+            Point::new(400., 400.),
+            Point::new(600., 400.),
+            Point::new(600., 600.),
+            Point::new(400., 600.),
+        ]);
+
+        builder.build().triangulate();
     }
 }
