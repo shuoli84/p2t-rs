@@ -122,10 +122,12 @@ impl AdvancingFront {
         self.nodes.remove(&PointKey(point));
     }
 
+    /// Get `n`th node
     pub fn nth(&self, n: usize) -> Option<(Point, &Node)> {
         self.nodes.iter().nth(n).map(|(k, v)| (k.point(), v))
     }
 
+    #[cfg(target_feature = "draw")]
     pub fn iter(&self) -> impl Iterator<Item = (Point, &Node)> {
         self.nodes.iter().map(|(p, n)| (p.point(), n))
     }
