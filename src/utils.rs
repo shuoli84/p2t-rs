@@ -32,6 +32,8 @@ impl Orientation {
 }
 
 pub fn orient_2d(a: Point, b: Point, c: Point) -> Orientation {
+    assert!(!a.eq(&b) && !a.eq(&c) && !b.eq(&c));
+
     let detleft = (a.x - c.x) * (b.y - c.y);
     let detright = (a.y - c.y) * (b.x - c.x);
     let val = detleft - detright;

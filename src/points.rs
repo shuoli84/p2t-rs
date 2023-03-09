@@ -10,6 +10,10 @@ impl PointId {
     pub fn get(&self, points: &Points) -> Option<Point> {
         points.get_point(*self)
     }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
 }
 
 /// Point store, provide a unique [`PointId`]

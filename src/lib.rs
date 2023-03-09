@@ -120,9 +120,13 @@ impl SweepContext {
 
         let mut t = node.triangle?;
 
-        if let Some(tri) = context.triangles.get(t) {
-            if tri.constrained_edge_cw(node.point_id) {
-                t = tri.neighbor_ccw(node.point_id);
+        loop {
+            if let Some(tri) = context.triangles.get(t) {
+                if !tri.constrained_edge_cw(node.point_id) {
+                    t = tri.neighbor_ccw(node.point_id);
+                } else {
+                    break;
+                }
             }
         }
 
@@ -146,6 +150,7 @@ impl SweepContext {
 
             if !tri.interior {
                 tri.interior = true;
+                println!("adding tri: {}", t.as_usize());
                 context.result.push(t);
 
                 for i in 0..3 {
@@ -180,9 +185,6 @@ impl SweepContext {
         context.map.insert(triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
-        println!("node_triangle added");
-        context.debug();
-
         if !Self::legalize(triangle, context) {
             Self::map_triangle_to_nodes(triangle, context)
         }
@@ -198,14 +200,12 @@ impl SweepContext {
 
         Self::fill_advancing_front(point, context);
 
-        context.debug_with_msg("after point event");
         context.draw();
     }
 
     /// returns whether it is changed
     fn legalize(triangle_id: TriangleId, context: &mut FillContext) -> bool {
         println!("legalize {:?}", triangle_id);
-        context.debug();
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
         for point_idx in 0..3 {
@@ -263,7 +263,6 @@ impl SweepContext {
                     op,
                     context.triangles,
                 );
-                context.debug_with_msg("after rotate pair");
 
                 // We now got one valid Delaunay Edge shared by two triangles
                 // This gives us 4 new edges to check for Delaunay
@@ -371,8 +370,6 @@ impl SweepContext {
     }
 
     fn fill(node_point: Point, context: &mut FillContext) -> Option<()> {
-        context.debug_with_msg(format!("fill {node_point:?}").as_str());
-
         // safety: all following nodes exists for sure
         let node = context.advancing_front.get_node(node_point).unwrap();
         let prev_node = context.advancing_front.prev_node(node_point)?;
@@ -405,8 +402,6 @@ impl SweepContext {
     }
 
     fn fill_advancing_front(node_point: Point, context: &mut FillContext) {
-        context.debug_with_msg("fill advancing front");
-
         {
             // fill right holes
             let mut node_point = node_point;
@@ -763,7 +758,11 @@ impl SweepContext {
 
         let triangle = context.triangles.get(triangle_id).unwrap();
         let p1 = triangle.point_ccw(point_id);
-        let o1 = orient_2d(edge.q, context.points.get_point(point_id).unwrap(), edge.q);
+        let o1 = orient_2d(
+            eq.get(&context.points).unwrap(),
+            p1.get(&context.points).unwrap(),
+            ep.get(&context.points).unwrap(),
+        );
 
         if o1.is_collinear() {
             if let Some(edge_index) = triangle.edge_index(edge.q_id(), p1) {
@@ -1130,8 +1129,23 @@ mod tests {
 
     use super::*;
 
+    fn attach_debugger() {
+        let url = format!(
+            "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','pid':{}}}",
+            std::process::id()
+        );
+        std::process::Command::new("code")
+            .arg("--open-url")
+            .arg(url)
+            .output()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1)); // Wait for debugger to attach
+    }
+
     #[test]
     fn test_context() {
+        // attach_debugger();
+
         let polyline = vec![
             Point::new(0., 0.),
             Point::new(200., 0.),

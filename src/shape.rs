@@ -159,14 +159,11 @@ impl Triangle {
 
     /// constrained edge flag for edge `cw` to given point
     pub fn constrained_edge_cw(&self, p: PointId) -> bool {
-        if p == self.points[0] {
-            self.constrained_edge[1]
-        } else if p == self.points[1] {
-            self.constrained_edge[2]
-        } else if p == self.points[2] {
-            self.constrained_edge[0]
-        } else {
-            panic!("point not belongs to triangle");
+        match self.point_index(p) {
+            Some(0) => self.constrained_edge[1],
+            Some(1) => self.constrained_edge[2],
+            Some(2) => self.constrained_edge[0],
+            _ => panic!("point not belongs to triangle"),
         }
     }
 

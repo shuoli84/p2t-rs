@@ -18,6 +18,10 @@ impl TriangleId {
     pub fn get_mut<'a, 'b>(&'a self, triangles: &'b mut Triangles) -> &'b mut Triangle {
         triangles.get_mut_unchecked(*self)
     }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
 }
 
 /// Triangle store, store triangles and their neighborhood relations
@@ -55,8 +59,11 @@ impl Triangles {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Triangle> {
-        self.triangles.iter()
+    pub fn iter(&self) -> impl Iterator<Item = (TriangleId, &Triangle)> {
+        self.triangles
+            .iter()
+            .enumerate()
+            .map(|(idx, t)| (TriangleId(idx), t))
     }
 
     /// mark two triangle as neighbor
