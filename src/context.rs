@@ -1,11 +1,8 @@
-use crate::{
-    shape::{Point, Triangle},
-    AdvancingFront, Edges, Points, TriangleId, Triangles,
-};
+use crate::{AdvancingFront, Edges, Points, TriangleId, Triangles};
 use rustc_hash::FxHashSet;
 use rusttype::Scale;
 
-pub struct FillContext<'a> {
+pub struct Context<'a> {
     pub points: &'a Points,
     pub edges: &'a Edges,
     pub triangles: &'a mut Triangles,
@@ -14,7 +11,7 @@ pub struct FillContext<'a> {
     pub result: Vec<TriangleId>,
 }
 
-impl FillContext<'_> {
+impl Context<'_> {
     pub fn draw(&self) {
         use image::{Rgb, RgbImage};
         use imageproc::drawing::*;
@@ -22,9 +19,7 @@ impl FillContext<'_> {
         use rusttype::Font;
 
         let red = Rgb([255u8, 0u8, 0u8]);
-        let green = Rgb([0u8, 255u8, 0u8]);
         let blue = Rgb([0u8, 0u8, 255u8]);
-        let white = Rgb([255u8, 255u8, 255u8]);
         let black = Rgb([0u8, 0, 0]);
         let gray = Rgb([180u8, 180, 180]);
         let yellow = Rgb([255u8, 255, 0]);

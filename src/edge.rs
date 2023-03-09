@@ -78,11 +78,13 @@ impl Edges {
     }
 
     /// Returns number of edges
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.edge_lower_points.len()
     }
 
     /// call `f` for each edge, order is not ganrenteed
+    #[cfg(test)]
     pub fn foreach_edge(&self, mut f: impl FnMut(Edge)) {
         self.point_edges.iter().for_each(|(q, edge_indexes)| {
             for index in edge_indexes.start..edge_indexes.end {
@@ -97,6 +99,7 @@ impl Edges {
     }
 
     /// get all edges
+    #[cfg(test)]
     pub fn all_edges(&self) -> Vec<Edge> {
         let mut result = Vec::with_capacity(self.len());
         self.foreach_edge(|e| result.push(e));

@@ -6,7 +6,7 @@ mod shape;
 mod triangles;
 mod utils;
 use advancing_front::AdvancingFront;
-use context::FillContext;
+use context::Context;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
 use rustc_hash::FxHashSet;
@@ -111,7 +111,7 @@ impl Sweeper {
             &self.points,
         );
 
-        let mut context = FillContext {
+        let mut context = Context {
             points: &self.points,
             triangles: &mut self.triangles,
             advancing_front: &mut advancing_front,
@@ -126,7 +126,7 @@ impl Sweeper {
         context.draw();
     }
 
-    fn sweep_points(context: &mut FillContext) {
+    fn sweep_points(context: &mut Context) {
         for (point_id, point) in context.points.iter_point_by_y(1) {
             Self::point_event(point_id, point, context);
             context.draw();
@@ -139,7 +139,7 @@ impl Sweeper {
         }
     }
 
-    fn finalize_polygon(context: &mut FillContext) -> Option<()> {
+    fn finalize_polygon(context: &mut Context) -> Option<()> {
         // get an internal triangle to start with
         // the first node is head, artificial point, so skip
         let (_, node) = context.advancing_front.nth(1)?;
@@ -163,7 +163,7 @@ impl Sweeper {
         Some(())
     }
 
-    fn clean_mesh(triangle_id: TriangleId, context: &mut FillContext) -> Option<()> {
+    fn clean_mesh(triangle_id: TriangleId, context: &mut Context) -> Option<()> {
         let mut triangles = Vec::<TriangleId>::new();
         triangles.push(triangle_id);
 
@@ -196,7 +196,7 @@ impl Sweeper {
 
 /// Point event related methods
 impl Sweeper {
-    fn point_event(point_id: PointId, point: Point, context: &mut FillContext) {
+    fn point_event(point_id: PointId, point: Point, context: &mut Context) {
         println!("\npoint event: {point_id:?} {point:?}");
 
         let (node_point, node) = context.advancing_front.locate_node(point.x).unwrap();
@@ -228,7 +228,7 @@ impl Sweeper {
     }
 
     /// returns whether it is changed
-    fn legalize(triangle_id: TriangleId, context: &mut FillContext) -> bool {
+    fn legalize(triangle_id: TriangleId, context: &mut Context) -> bool {
         println!("legalize {:?}", triangle_id);
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
@@ -378,7 +378,7 @@ impl Sweeper {
     }
 
     /// update advancing front node's triangle
-    fn map_triangle_to_nodes(triangle_id: TriangleId, context: &mut FillContext) {
+    fn map_triangle_to_nodes(triangle_id: TriangleId, context: &mut Context) {
         let triangle = context.triangles.get(triangle_id).unwrap();
         for i in 0..3 {
             if triangle.neighbors[i].invalid() {
@@ -393,7 +393,7 @@ impl Sweeper {
         }
     }
 
-    fn fill(node_point: Point, context: &mut FillContext) -> Option<()> {
+    fn fill(node_point: Point, context: &mut Context) -> Option<()> {
         // safety: all following nodes exists for sure
         let node = context.advancing_front.get_node(node_point).unwrap();
         let prev_node = context.advancing_front.prev_node(node_point)?;
@@ -425,7 +425,7 @@ impl Sweeper {
         Some(())
     }
 
-    fn fill_advancing_front(node_point: Point, context: &mut FillContext) {
+    fn fill_advancing_front(node_point: Point, context: &mut Context) {
         {
             // fill right holes
             let mut node_point = node_point;
@@ -511,7 +511,7 @@ impl EdgeEvent {
 
 /// EdgeEvent related methods
 impl Sweeper {
-    fn edge_event(edge: Edge, node_point: Point, context: &mut FillContext) {
+    fn edge_event(edge: Edge, node_point: Point, context: &mut Context) {
         let p = context.points.get_point(edge.p).unwrap();
         let q = context.points.get_point(edge.q).unwrap();
         let edge_event = EdgeEvent {
@@ -561,7 +561,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
+    fn fill_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         if edge.right {
             Self::fill_right_above_edge_event(edge, node_point, context);
         } else {
@@ -569,12 +569,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_right_above_edge_event(
-        edge: &EdgeEvent,
-        mut node_point: Point,
-
-        context: &mut FillContext,
-    ) {
+    fn fill_right_above_edge_event(edge: &EdgeEvent, mut node_point: Point, context: &mut Context) {
         while let Some((next_node_point, _)) = context.advancing_front.next_node(node_point) {
             if next_node_point.x >= edge.p.x {
                 break;
@@ -591,7 +586,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_right_below_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
+    fn fill_right_below_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         if node_point.x < edge.p.x {
             // todo: fixme
             let (next_node_point, _) = context.advancing_front.next_node(node_point).unwrap();
@@ -612,11 +607,7 @@ impl Sweeper {
     }
 
     /// recursively fill concave nodes
-    fn fill_right_concave_edge_event(
-        edge: &EdgeEvent,
-        node_point: Point,
-        context: &mut FillContext,
-    ) {
+    fn fill_right_concave_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         let (node_next_point, next_node) = context.advancing_front.next_node(node_point).unwrap();
         let next_node_point_id = next_node.point_id;
         Self::fill(node_next_point, context);
@@ -640,11 +631,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_right_convex_edge_event(
-        edge: &EdgeEvent,
-        node_point: Point,
-        context: &mut FillContext,
-    ) {
+    fn fill_right_convex_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         let (next_node_point, _) = context.advancing_front.next_node(node_point).unwrap();
         let (next_next_node_point, _) = context.advancing_front.next_node(next_node_point).unwrap();
         let (next_next_next_node_point, _) = context
@@ -673,11 +660,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_left_above_edge_event(
-        edge: &EdgeEvent,
-        mut node_point: Point,
-        context: &mut FillContext,
-    ) {
+    fn fill_left_above_edge_event(edge: &EdgeEvent, mut node_point: Point, context: &mut Context) {
         while let Some((prev_node_point, _)) = context.advancing_front.prev_node(node_point) {
             // check if next node is below the edge
             if prev_node_point.x <= edge.p.x {
@@ -692,7 +675,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_left_below_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
+    fn fill_left_below_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         if node_point.x > edge.p.x {
             let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
             let (prev_prev_node_point, _) =
@@ -709,7 +692,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_left_convex_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut FillContext) {
+    fn fill_left_convex_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         // next concave or convex?
         let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
         let (prev_prev_node_point, _) = context.advancing_front.prev_node(prev_node_point).unwrap();
@@ -739,11 +722,7 @@ impl Sweeper {
         }
     }
 
-    fn fill_left_concave_edge_event(
-        edge: &EdgeEvent,
-        node_point: Point,
-        context: &mut FillContext,
-    ) {
+    fn fill_left_concave_edge_event(edge: &EdgeEvent, node_point: Point, context: &mut Context) {
         let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
         Self::fill(prev_node_point, context);
 
@@ -771,7 +750,7 @@ impl Sweeper {
         edge: &EdgeEvent,
         triangle_id: TriangleId,
         point_id: PointId,
-        context: &mut FillContext,
+        context: &mut Context,
     ) {
         assert!(!triangle_id.invalid());
 
@@ -847,7 +826,7 @@ impl Sweeper {
         edge: &EdgeEvent,
         triangle_id: TriangleId,
         p: PointId,
-        context: &mut FillContext,
+        context: &mut Context,
     ) {
         assert!(!triangle_id.invalid());
 
@@ -912,7 +891,7 @@ impl Sweeper {
         ot: TriangleId,
         p: PointId,
         op: PointId,
-        context: &mut FillContext,
+        context: &mut Context,
     ) -> TriangleId {
         if o.is_ccw() {
             // ot is not crossing edge after flip
@@ -948,7 +927,7 @@ impl Sweeper {
         eq: PointId,
         ot: TriangleId,
         op: PointId,
-        context: &mut FillContext,
+        context: &mut Context,
     ) -> PointId {
         let o2d = orient_2d(
             eq.get(&context.points).unwrap(),
@@ -979,7 +958,7 @@ impl Sweeper {
         flip_triangle_id: TriangleId,
         t_id: TriangleId,
         p: PointId,
-        context: &mut FillContext,
+        context: &mut Context,
     ) {
         let t = t_id.get(&context.triangles);
         let ot = t.neighbor_across(p);
@@ -1036,7 +1015,7 @@ impl Sweeper {
 
     /// basin is like a bowl, we first identify it's left, bottom, right node.
     /// then fill it
-    fn fill_basin(node_point: Point, context: &mut FillContext) -> Option<()> {
+    fn fill_basin(node_point: Point, context: &mut Context) -> Option<()> {
         let next_node = context.advancing_front.next_node(node_point)?;
         let next_next_node = context.advancing_front.next_node(next_node.0)?;
 
@@ -1094,7 +1073,7 @@ impl Sweeper {
         Some(())
     }
 
-    fn fill_basin_req(node: Point, basin: Basin, context: &mut FillContext) -> Option<()> {
+    fn fill_basin_req(node: Point, basin: Basin, context: &mut Context) -> Option<()> {
         if Self::is_shallow(node, &basin) {
             // stop fill if basin is shallow
             return None;
@@ -1178,7 +1157,7 @@ mod tests {
             Point::new(30., 300.),
             Point::new(140., 110.),
         ];
-        let mut builder = SweeperBuilder::new(polyline);
+        let builder = SweeperBuilder::new(polyline);
         let mut sweeper = builder.build();
         sweeper.triangulate();
     }
@@ -1188,7 +1167,7 @@ mod tests {
         attach_debugger();
 
         let mut points = Vec::<Point>::new();
-        for i in 0..100 {
+        for _ in 0..100 {
             let x: f64 = rand::thread_rng().gen_range(0.0..800.);
             let y: f64 = rand::thread_rng().gen_range(0.0..800.);
             points.push(Point::new(x, y));
