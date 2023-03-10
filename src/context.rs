@@ -9,6 +9,13 @@ pub struct Context<'a> {
 
     /// messages to add more context on the drawing, reset for each draw.
     pub messages: Vec<String>,
+
+    pub statistic: Statistics,
+}
+
+#[derive(Default, Debug)]
+pub struct Statistics {
+    pub legalize_count: u64,
 }
 
 impl<'a> Context<'a> {
@@ -25,7 +32,12 @@ impl<'a> Context<'a> {
             advancing_front,
             result: Default::default(),
             messages: Default::default(),
+            statistic: Default::default(),
         }
+    }
+
+    pub fn count_legalize_incr(&mut self) {
+        self.statistic.legalize_count += 1;
     }
 
     #[cfg(not(feature = "draw"))]

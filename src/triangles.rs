@@ -62,7 +62,6 @@ impl Triangles {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
 
-    #[cfg(feature = "draw")]
     pub fn iter(&self) -> impl Iterator<Item = (TriangleId, &Triangle)> {
         self.triangles
             .iter()

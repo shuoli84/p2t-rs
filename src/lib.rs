@@ -116,11 +116,28 @@ impl Sweeper {
         );
 
         Self::sweep_points(&mut context);
-        Self::finalize_polygon(&mut context);
-
+        Self::fix_triangles(&mut context);
+        context.messages.push("repair 1st".into());
         context.draw();
 
-        assert!(Self::verify_triangles(&context));
+        Self::fix_triangles(&mut context);
+        context.messages.push("repair 2".into());
+        context.draw();
+
+        Self::fix_triangles(&mut context);
+        context.messages.push("repair 3".into());
+        context.draw();
+
+        Self::fix_triangles(&mut context);
+        context.messages.push("repair 4".into());
+        context.draw();
+
+        Self::finalize_polygon(&mut context);
+        context.messages.push("finalize polygon".into());
+        context.draw();
+
+        dbg!(&context.statistic);
+        assert!(Self::verify_result(&context));
     }
 
     fn sweep_points(context: &mut Context) {
@@ -260,6 +277,8 @@ impl Sweeper {
 
     /// returns whether it is changed
     fn legalize(triangle_id: TriangleId, context: &mut Context) -> bool {
+        context.count_legalize_incr();
+
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
         for point_idx in 0..3 {
@@ -1273,7 +1292,26 @@ impl Sweeper {
 }
 
 impl Sweeper {
-    fn verify_triangles(context: &Context) -> bool {
+    fn fix_triangles(context: &mut Context) {
+        let triangle_ids = context
+            .triangles
+            .iter()
+            .map(|(t_id, _)| t_id)
+            .collect::<Vec<_>>();
+
+        for t_id in triangle_ids {
+            if !Self::is_legalize(t_id, context) {
+                println!("{} not legal, fix it", t_id.as_usize());
+                context
+                    .triangles
+                    .get_mut_unchecked(t_id)
+                    .clear_delaunay_edges();
+                Sweeper::legalize(t_id, context);
+            }
+        }
+    }
+
+    fn verify_result(context: &Context) -> bool {
         let mut verify_result = true;
         for t_id in &context.result {
             if !Self::is_legalize(*t_id, context) {
