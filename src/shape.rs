@@ -59,9 +59,6 @@ pub struct Triangle {
     /// flags to determine if an edge is a Constrained edge
     pub constrained_edge: [bool; 3],
 
-    //// flags to determine if an edge is a Delauney edge
-    pub delaunay_edge: [bool; 3],
-
     /// triangle points
     pub points: [PointId; 3],
 
@@ -77,7 +74,6 @@ impl Triangle {
         Self {
             points: [a, b, c],
             constrained_edge: [false, false, false],
-            delaunay_edge: [false, false, false],
             interior: false,
             neighbors: [TriangleId::INVALID; 3],
         }
@@ -247,57 +243,6 @@ impl Triangle {
             println!("triangle: {self:?} old_point: {o_point:?}");
             panic!("point not belongs to triangle")
         }
-    }
-
-    /// delaunay edge flag for edge `ccw` to given point
-    pub fn delaunay_edge_ccw(&self, p: PointId) -> bool {
-        if p == self.points[0] {
-            self.delaunay_edge[2]
-        } else if p == self.points[1] {
-            self.delaunay_edge[0]
-        } else if p == self.points[2] {
-            self.delaunay_edge[1]
-        } else {
-            println!("triangle: {self:?} point: {p:?}");
-            panic!("point not belongs to triangle");
-        }
-    }
-
-    /// delaunay edge flag for edge `cw` to given point
-    pub fn delaunay_edge_cw(&self, p: PointId) -> bool {
-        if p == self.points[0] {
-            self.delaunay_edge[1]
-        } else if p == self.points[1] {
-            self.delaunay_edge[2]
-        } else if p == self.points[2] {
-            self.delaunay_edge[0]
-        } else {
-            panic!("point not belongs to triangle");
-        }
-    }
-
-    pub fn set_delunay_edge_ccw(&mut self, p: PointId, val: bool) {
-        if self.points[0] == p {
-            self.delaunay_edge[2] = val;
-        } else if self.points[1] == p {
-            self.delaunay_edge[0] = val;
-        } else {
-            self.delaunay_edge[1] = val;
-        }
-    }
-
-    pub fn set_delunay_edge_cw(&mut self, p: PointId, val: bool) {
-        if self.points[0] == p {
-            self.delaunay_edge[1] = val;
-        } else if self.points[1] == p {
-            self.delaunay_edge[2] = val;
-        } else {
-            self.delaunay_edge[0] = val;
-        }
-    }
-
-    pub fn clear_delaunay_edges(&mut self) {
-        self.delaunay_edge = [false; 3];
     }
 
     pub fn clear_neighbors(&mut self) {

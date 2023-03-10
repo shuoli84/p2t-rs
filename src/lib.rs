@@ -363,25 +363,16 @@ impl Sweeper {
         let ce3 = ot.constrained_edge_ccw(op);
         let ce4 = ot.constrained_edge_cw(op);
 
-        let de1 = t.delaunay_edge_ccw(p);
-        let de2 = t.delaunay_edge_cw(p);
-        let de3 = ot.delaunay_edge_ccw(op);
-        let de4 = ot.delaunay_edge_cw(op);
-
         // rotate shared edge one vertex cw to legalize it
         triangles.legalize(triangle_id, p, op);
         triangles.legalize(ot_id, op, p);
 
         let t = triangles.get_mut_unchecked(triangle_id);
-        t.set_delunay_edge_cw(p, de2);
-        t.set_delunay_edge_ccw(op, de3);
         t.set_constrained_edge_cw(p, ce2);
         t.set_constrained_edge_ccw(op, ce3);
         t.clear_neighbors();
 
         let ot = triangles.get_mut_unchecked(ot_id);
-        ot.set_delunay_edge_ccw(p, de1);
-        ot.set_delunay_edge_cw(op, de4);
         ot.set_constrained_edge_ccw(p, ce1);
         ot.set_constrained_edge_cw(op, ce4);
         ot.clear_neighbors();
@@ -1284,10 +1275,6 @@ impl Sweeper {
         for t_id in triangle_ids {
             if !Self::is_legalize(t_id, context) {
                 println!("{} not legal, fix it", t_id.as_usize());
-                context
-                    .triangles
-                    .get_mut_unchecked(t_id)
-                    .clear_delaunay_edges();
                 Sweeper::legalize(t_id, context, None);
             }
         }
@@ -1341,7 +1328,7 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        attach_debugger();
+        // attach_debugger();
         let file_path = "test_data/lastest_test_data";
 
         let points = if let Some(points) = try_load_from_file(file_path) {
