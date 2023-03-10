@@ -323,6 +323,13 @@ impl Sweeper {
                         )
                     };
                     if illegal {
+                        println!(
+                            "rotate {} and {}, from: {:?} and {:?}",
+                            triangle_id.as_usize(),
+                            opposite_triangle_id.as_usize(),
+                            triangle_id.get(&context.triangles),
+                            opposite_triangle_id.get(&context.triangles),
+                        );
                         // rotate shared edge one vertex cw to legalize it
                         Self::rotate_triangle_pair(
                             triangle_id,
@@ -330,6 +337,11 @@ impl Sweeper {
                             opposite_triangle_id,
                             op,
                             context.triangles,
+                        );
+                        println!(
+                            "after rotate: {:?} and {:?}",
+                            triangle_id.get(&context.triangles),
+                            opposite_triangle_id.get(&context.triangles),
                         );
 
                         task_queue.push(triangle_id);
