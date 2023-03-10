@@ -233,7 +233,23 @@ impl<'a> Context<'a> {
                 Scale::uniform(10.),
                 &font,
                 format!("t:{:?}", n.triangle.map(|t| t.as_usize())).as_str(),
-            )
+            );
+
+            if let Some(t) = n.triangle {
+                let t = self.triangles.get(t).unwrap();
+
+                let p0 = self.points.get_point(t.points[0]).unwrap();
+                let p1 = self.points.get_point(t.points[1]).unwrap();
+                let p2 = self.points.get_point(t.points[2]).unwrap();
+
+                let p0 = map.map_point_f32(p0.x, p0.y);
+                let p1 = map.map_point_f32(p1.x, p1.y);
+                let p2 = map.map_point_f32(p2.x, p2.y);
+
+                draw_line_segment_mut(&mut image, p0, p1, red);
+                draw_line_segment_mut(&mut image, p1, p2, red);
+                draw_line_segment_mut(&mut image, p2, p0, red);
+            }
         }
 
         for t in &self.result {

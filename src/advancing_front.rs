@@ -155,6 +155,7 @@ impl AdvancingFront {
     }
 
     /// Get next node of the node identified by `point`
+    /// Note: even if the node is deleted, then this returns next node
     pub fn next_node(&self, point: Point) -> Option<(Point, &Node)> {
         self.nodes
             .range(PointKey(point)..)
@@ -163,6 +164,7 @@ impl AdvancingFront {
     }
 
     /// Get prev node of the node identified by `point`
+    /// Note: even if the node is deleted, then this returns prev node
     pub fn prev_node(&self, point: Point) -> Option<(Point, &Node)> {
         self.nodes
             .range(..PointKey(point))

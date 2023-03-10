@@ -171,7 +171,6 @@ impl Sweeper {
 
             if !tri.interior {
                 tri.interior = true;
-                println!("adding tri: {}", t.as_usize());
                 context.result.push(t);
 
                 for i in 0..3 {
@@ -215,10 +214,7 @@ impl Sweeper {
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
         if point.x <= node_point.x + f64::EPSILON {
-            Self::fill(node_point, context);
-
-            // in this case, the advancing node should be deleted, as it is covered by new point
-            context.advancing_front.delete(node_point);
+            Self::fill_one(node_point, context);
         }
 
         Self::fill_advancing_front(point, context);
@@ -230,7 +226,7 @@ impl Sweeper {
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
         for point_idx in 0..3 {
-            let triangle = context.triangles.get(triangle_id).unwrap();
+            let triangle = context.triangles.get_unchecked(triangle_id);
             if triangle.delaunay_edge[point_idx] {
                 continue;
             }
@@ -390,8 +386,11 @@ impl Sweeper {
         }
     }
 
-    fn fill(node_point: Point, context: &mut Context) -> Option<()> {
-        // safety: all following nodes exists for sure
+    /// fill the node with one triangle.
+    /// Note: The moment it filled, advancing_front is modified.
+    /// if the node is covered by another triangle, then it is deleted from advancing_front.
+    /// all following advancing front lookup is affected.
+    fn fill_one(node_point: Point, context: &mut Context) -> Option<()> {
         let node = context.advancing_front.get_node(node_point).unwrap();
         let prev_node = context.advancing_front.prev_node(node_point)?;
         let next_node = context.advancing_front.next_node(node_point)?;
@@ -416,8 +415,22 @@ impl Sweeper {
             Self::map_triangle_to_nodes(triangle_id, context);
         }
 
-        // this node is shadowed by new triangle, delete it from advancing front
-        context.advancing_front.delete(node_point);
+        // this node maybe shadowed by new triangle, delete it from advancing front
+        let node = context.advancing_front.get_node(node_point).unwrap();
+        let tri = context.triangles.get_unchecked(node.triangle.unwrap());
+        if tri.point_index(node.point_id).is_none() || !tri.neighbor_cw(node.point_id).invalid() {
+            // todo: we need to ensure all frontint node's triangle is updated. which means
+            //     even for node needs to delete
+            // 1.
+            // if the node's triangle doesn't contain node, which
+            // means the legalize process rotated the tri, and mapping
+            // logic didn't get a chance to fix it. Then this node
+            // is not a valid front node.
+            // 2.
+            // node's triangle has a valid neighbor, which means the edge is not on the front
+            println!("deleting {node_point:?} from advancing front");
+            context.advancing_front.delete(node_point);
+        }
         Some(())
     }
 
@@ -432,7 +445,7 @@ impl Sweeper {
                         break;
                     }
 
-                    Self::fill(next_node_point, context);
+                    Self::fill_one(next_node_point, context);
                     node_point = next_node_point;
                 } else {
                     break;
@@ -451,13 +464,16 @@ impl Sweeper {
                         break;
                     }
 
-                    Self::fill(prev_node_point, context);
+                    Self::fill_one(prev_node_point, context);
                     node_point = prev_node_point;
                 } else {
                     break;
                 }
             }
         }
+
+        context.messages.push("filled right & left holes".into());
+        context.draw();
 
         // file right basins
         if let Some(basin_angle) = Self::basin_angle(node_point, context.advancing_front) {
@@ -540,23 +556,33 @@ impl Sweeper {
             right: p.x > q.x,
         };
 
-        let node = context.advancing_front.get_node(node_point).unwrap();
+        {
+            // check and fill
+            let node = context.advancing_front.get_node(node_point).unwrap();
 
-        let triangle = node
-            .triangle
-            .expect("only af's last node has None triangle id");
-        if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
-            // the edge is already an edge of the triangle, return
-            context
-                .messages
-                .push("the edge is already an edge of the triangle, return".to_string());
-            return;
+            let triangle = node
+                .triangle
+                .expect("only af's last node has None triangle id");
+            if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
+                // the edge is already an edge of the triangle, return
+                context
+                    .messages
+                    .push("the edge is already an edge of the triangle, return".to_string());
+                return;
+            }
+
+            // for now we will do all needed filling
+            Self::fill_edge_event(&constrain_edge, node_point, context);
+            context.draw();
         }
 
-        // for now we will do all needed filling
-        Self::fill_edge_event(&constrain_edge, node_point, context);
-        context.draw();
-
+        // node's triangle may changed, get the latest
+        let triangle = context
+            .advancing_front
+            .get_node(node_point)
+            .unwrap()
+            .triangle
+            .expect("only af's last node has None triangle id");
         Self::edge_event_process(edge.p, edge.q, &constrain_edge, triangle, edge.q, context);
     }
 
@@ -655,7 +681,7 @@ impl Sweeper {
     ) {
         let (node_next_point, next_node) = context.advancing_front.next_node(node_point).unwrap();
         let next_node_point_id = next_node.point_id;
-        Self::fill(node_next_point, context);
+        Self::fill_one(node_next_point, context);
 
         if next_node_point_id != edge.p_id() {
             // next above or below edge?
@@ -789,7 +815,7 @@ impl Sweeper {
         context: &mut Context,
     ) {
         let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
-        Self::fill(prev_node_point, context);
+        Self::fill_one(prev_node_point, context);
 
         let (prev_node_point, prev_node) = context.advancing_front.prev_node(node_point).unwrap();
 
@@ -1068,11 +1094,33 @@ impl Sweeper {
     }
 }
 
+#[derive(Debug)]
 struct Basin {
     left: Point,
     right: Point,
+    bottom: Point,
     width: f64,
     left_higher: bool,
+}
+
+impl Basin {
+    pub fn is_shallow(&self, point: Point) -> bool {
+        let height = if self.left_higher {
+            self.left.y - point.y
+        } else {
+            self.right.y - point.y
+        };
+
+        self.width > height
+    }
+
+    pub fn completed(&self, point: Point) -> bool {
+        if point.x >= self.right.x || point.x <= self.left.x {
+            return true;
+        }
+
+        self.is_shallow(point)
+    }
 }
 
 /// Basin related methods
@@ -1134,9 +1182,10 @@ impl Sweeper {
 
         Self::fill_basin_req(
             bottom,
-            Basin {
+            &Basin {
                 left,
                 right,
+                bottom,
                 width,
                 left_higher,
             },
@@ -1146,13 +1195,14 @@ impl Sweeper {
         Some(())
     }
 
-    fn fill_basin_req(node: Point, basin: Basin, context: &mut Context) -> Option<()> {
-        if Self::is_shallow(node, &basin) {
-            // stop fill if basin is shallow
+    fn fill_basin_req(node: Point, basin: &Basin, context: &mut Context) -> Option<()> {
+        if basin.completed(node) {
             return None;
         }
 
-        Self::fill(node, context);
+        println!("filling basin req {node:?}");
+
+        Self::fill_one(node, context);
 
         // find the next node to fill
         let prev_point = context.advancing_front.prev_node(node)?.0;
@@ -1187,16 +1237,6 @@ impl Sweeper {
 
         Self::fill_basin_req(new_node, basin, context)
     }
-
-    fn is_shallow(node: Point, basin: &Basin) -> bool {
-        let height = if basin.left_higher {
-            basin.left.y - node.y
-        } else {
-            basin.right.y - node.y
-        };
-
-        basin.width > height
-    }
 }
 
 #[cfg(test)]
@@ -1220,6 +1260,16 @@ mod tests {
         let builder = SweeperBuilder::new(polyline);
         let mut sweeper = builder.build();
         sweeper.triangulate();
+    }
+
+    #[test]
+    fn test_forever_rand() {
+        let mut idx = 0;
+        loop {
+            idx += 1;
+            println!("run {idx}");
+            test_rand();
+        }
     }
 
     #[test]

@@ -114,6 +114,7 @@ impl Triangle {
         } else if point == self.points[2] {
             self.points[0]
         } else {
+            println!("point({point:?}) not belongs to triangle {self:?}");
             panic!("point not belongs to triangle");
         }
     }
@@ -215,6 +216,7 @@ impl Triangle {
         } else if p == self.points[2] {
             self.neighbors[0]
         } else {
+            println!("point({p:?}) not belongs to triangle {self:?}");
             panic!("point not belongs to triangle");
         }
     }
