@@ -5,10 +5,14 @@ mod points;
 mod shape;
 mod triangles;
 mod utils;
+
+use std::ops::AddAssign;
+
 use advancing_front::AdvancingFront;
 use context::Context;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
+use rustc_hash::FxHashMap;
 use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::{in_circle, orient_2d, Orientation};
@@ -150,6 +154,8 @@ impl Sweeper {
                 Self::edge_event(edge, point, context);
                 context.draw();
             }
+
+            assert!(Self::verify_triangles(&context));
         }
     }
 
@@ -216,19 +222,17 @@ impl Sweeper {
             .push(format!("point event: {point_id:?} {point:?}"));
 
         let (node_point, node) = context.advancing_front.locate_node(point.x).unwrap();
-        let (_, right) = context.advancing_front.next_node(node_point).unwrap();
+        let (_, next_node) = context.advancing_front.next_node(node_point).unwrap();
 
         let triangle =
             context
                 .triangles
-                .insert(Triangle::new(point_id, node.point_id, right.point_id));
+                .insert(Triangle::new(point_id, node.point_id, next_node.point_id));
         let node_triangle = node.triangle.unwrap();
         context.triangles.mark_neighbor(node_triangle, triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
-        if !Self::legalize(triangle, context) {
-            Self::map_triangle_to_nodes(triangle, context)
-        }
+        Self::legalize(triangle, context);
 
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
@@ -252,8 +256,6 @@ impl Sweeper {
             let op = opposite_triangle.opposite_point(&triangle, p);
             let oi = opposite_triangle.point_index(op).unwrap();
 
-            // if this is a constrained edge or a delaunay edge(only during recursive legalization)
-            // then we should not try to legalize
             if opposite_triangle.constrained_edge[oi] {
                 continue;
             }
@@ -276,95 +278,80 @@ impl Sweeper {
     }
 
     /// returns whether it is changed
-    fn legalize(triangle_id: TriangleId, context: &mut Context) -> bool {
+    fn legalize(triangle_id: TriangleId, context: &mut Context) {
         context.count_legalize_incr();
 
-        // To legalize a triangle we start by finding if any of the three edges
-        // violate the Delaunay condition
-        for point_idx in 0..3 {
-            let triangle = context.triangles.get_unchecked(triangle_id);
-            if triangle.delaunay_edge[point_idx] {
-                continue;
-            }
+        let mut triangle_tasks = FxHashMap::default();
 
-            let opposite_triangle_id = triangle.neighbors[point_idx];
-            let Some(opposite_triangle) = context.triangles.get(opposite_triangle_id) else {
-                continue;
-            };
+        let mut task_queue = Vec::<TriangleId>::new();
+        task_queue.push(triangle_id);
+        triangle_tasks.insert(triangle_id, 1);
 
-            let p = triangle.points[point_idx];
-            let op = opposite_triangle.opposite_point(&triangle, p);
-            let oi = opposite_triangle.point_index(op).unwrap();
+        while let Some(triangle_id) = task_queue.pop() {
+            let mut f = || {
+                println!("legalizing {triangle_id:?}");
 
-            // if this is a constrained edge or a delaunay edge(only during recursive legalization)
-            // then we should not try to legalize
-            if opposite_triangle.constrained_edge[oi] {
-                // if opposite_triangle.constrained_edge[oi] || opposite_triangle.delaunay_edge[oi] {
-                context.triangles.set_constrained(
-                    triangle_id,
-                    point_idx,
-                    opposite_triangle.constrained_edge[oi],
-                );
-                continue;
-            }
+                for point_idx in 0..3 {
+                    let triangle = context.triangles.get_unchecked(triangle_id);
 
-            let inside = unsafe {
-                in_circle(
-                    context.points.get_point_uncheck(p),
-                    context.points.get_point_uncheck(triangle.point_ccw(p)),
-                    context.points.get_point_uncheck(triangle.point_cw(p)),
-                    context.points.get_point_uncheck(op),
-                )
-            };
+                    let opposite_triangle_id = triangle.neighbors[point_idx];
+                    let Some(opposite_triangle) = context.triangles.get(opposite_triangle_id) else {
+                        continue;
+                    };
 
-            if inside {
-                // first mark this shared edge as delaunay
-                context
-                    .triangles
-                    .get_mut_unchecked(triangle_id)
-                    .delaunay_edge[point_idx] = true;
-                context
-                    .triangles
-                    .get_mut_unchecked(opposite_triangle_id)
-                    .delaunay_edge[oi] = true;
+                    let p = triangle.points[point_idx];
+                    let op = opposite_triangle.opposite_point(&triangle, p);
+                    let oi = opposite_triangle.point_index(op).unwrap();
 
-                // rotate shared edge one vertex cw to legalize it
-                Self::rotate_triangle_pair(
-                    triangle_id,
-                    p,
-                    opposite_triangle_id,
-                    op,
-                    context.triangles,
-                );
+                    // if this is a constrained edge or a delaunay edge(only during recursive legalization)
+                    // then we should not try to legalize
+                    if opposite_triangle.constrained_edge[oi] {
+                        context.triangles.set_constrained(
+                            triangle_id,
+                            point_idx,
+                            opposite_triangle.constrained_edge[oi],
+                        );
+                        continue;
+                    }
 
-                // We now got one valid Delaunay Edge shared by two triangles
-                // This gives us 4 new edges to check for Delaunay
-                let not_legalized = !Self::legalize(triangle_id, context);
-                if not_legalized {
-                    Self::map_triangle_to_nodes(triangle_id, context);
+                    let illegal = unsafe {
+                        in_circle(
+                            context.points.get_point_uncheck(p),
+                            context.points.get_point_uncheck(triangle.point_ccw(p)),
+                            context.points.get_point_uncheck(triangle.point_cw(p)),
+                            context.points.get_point_uncheck(op),
+                        )
+                    };
+                    if illegal {
+                        // rotate shared edge one vertex cw to legalize it
+                        Self::rotate_triangle_pair(
+                            triangle_id,
+                            p,
+                            opposite_triangle_id,
+                            op,
+                            context.triangles,
+                        );
+
+                        task_queue.push(triangle_id);
+                        triangle_tasks.get_mut(&triangle_id).unwrap().add_assign(1);
+
+                        task_queue.push(opposite_triangle_id);
+                        triangle_tasks
+                            .entry(opposite_triangle_id)
+                            .or_insert(0)
+                            .add_assign(1);
+                    }
                 }
-
-                let not_legalized = !Self::legalize(opposite_triangle_id, context);
-                if not_legalized {
-                    Self::map_triangle_to_nodes(opposite_triangle_id, context);
-                }
-
-                context
-                    .triangles
-                    .get_mut_unchecked(triangle_id)
-                    .delaunay_edge[point_idx] = false;
-                context
-                    .triangles
-                    .get_mut_unchecked(opposite_triangle_id)
-                    .delaunay_edge[oi] = false;
-
-                // If triangle have been legalized no need to check the other edges since
-                // the recursive legalization will handles those so we can end here.
-                return true;
+            };
+            f();
+            let task_count = triangle_tasks.get_mut(&triangle_id).unwrap();
+            if *task_count == 1 {
+                println!("triangle {} done", triangle_id.as_usize());
+                Self::map_triangle_to_nodes(triangle_id, context);
+            } else {
+                *task_count -= 1;
             }
         }
-
-        false
     }
 
     fn rotate_triangle_pair(
@@ -467,9 +454,7 @@ impl Sweeper {
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
 
-        if !Self::legalize(triangle_id, context) {
-            Self::map_triangle_to_nodes(triangle_id, context);
-        }
+        Self::legalize(triangle_id, context);
 
         // this node maybe shadowed by new triangle, delete it from advancing front
         let node = context.advancing_front.get_node(node_point).unwrap();
@@ -1292,6 +1277,25 @@ impl Sweeper {
 }
 
 impl Sweeper {
+    fn verify_triangles(context: &Context) -> bool {
+        let triangle_ids = context
+            .triangles
+            .iter()
+            .map(|(t_id, _)| t_id)
+            .collect::<Vec<_>>();
+
+        let mut result = true;
+
+        for t_id in triangle_ids {
+            if !Self::is_legalize(t_id, context) {
+                println!("{} not legal", t_id.as_usize());
+                result = false;
+            }
+        }
+
+        result
+    }
+
     fn fix_triangles(context: &mut Context) {
         let triangle_ids = context
             .triangles
@@ -1359,7 +1363,7 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        // attach_debugger();
+        attach_debugger();
         let file_path = "test_data/lastest_test_data";
 
         let points = if let Some(points) = try_load_from_file(file_path) {
@@ -1394,7 +1398,7 @@ mod tests {
 
         builder.build().triangulate();
 
-        delete_file(file_path);
+        // delete_file(file_path);
     }
 
     fn try_load_from_file(path: &str) -> Option<Vec<Point>> {

@@ -223,25 +223,28 @@ impl Triangle {
 
     /// neighbor counter clockwise to given point
     pub fn neighbor_across(&self, p: PointId) -> TriangleId {
-        self.neighbors[self.point_index(p).unwrap()]
+        let Some(point_index) = self.point_index(p) else {
+            panic!("break here");
+        };
+        self.neighbors[point_index]
     }
 
-    /// Legalize triangle by rotating clockwise around `old_point`
-    pub fn legalize(&mut self, old_point: PointId, new_point: PointId) {
-        if old_point == self.points[0] {
+    /// Rotate triangle clockwise around `o_point`
+    pub fn rotate_cw(&mut self, o_point: PointId, n_point: PointId) {
+        if o_point == self.points[0] {
             self.points[1] = self.points[0];
             self.points[0] = self.points[2];
-            self.points[2] = new_point;
-        } else if old_point == self.points[1] {
+            self.points[2] = n_point;
+        } else if o_point == self.points[1] {
             self.points[2] = self.points[1];
             self.points[1] = self.points[0];
-            self.points[0] = new_point;
-        } else if old_point == self.points[2] {
+            self.points[0] = n_point;
+        } else if o_point == self.points[2] {
             self.points[0] = self.points[2];
             self.points[2] = self.points[1];
-            self.points[1] = new_point;
+            self.points[1] = n_point;
         } else {
-            println!("triangle: {self:?} old_point: {old_point:?}");
+            println!("triangle: {self:?} old_point: {o_point:?}");
             panic!("point not belongs to triangle")
         }
     }
@@ -330,7 +333,7 @@ mod tests {
         //       4               4
         //
         let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
-        t.legalize(PointId(1), PointId(4));
+        t.rotate_cw(PointId(1), PointId(4));
         assert_eq!(t.points, [PointId(3), PointId(1), PointId(4)]);
 
         //
@@ -340,11 +343,11 @@ mod tests {
         //    2  -  3   =>      2  - -  3
         //
         let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
-        t.legalize(PointId(3), PointId(4));
+        t.rotate_cw(PointId(3), PointId(4));
         assert_eq!(t.points, [PointId(3), PointId(4), PointId(2)]);
 
         let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
-        t.legalize(PointId(2), PointId(4));
+        t.rotate_cw(PointId(2), PointId(4));
         assert_eq!(t.points, [PointId(4), PointId(1), PointId(2)]);
     }
 }

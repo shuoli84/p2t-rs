@@ -98,7 +98,7 @@ impl Triangles {
     }
 
     pub fn legalize(&mut self, id: TriangleId, o_point: PointId, n_point: PointId) {
-        self.get_mut_unchecked(id).legalize(o_point, n_point);
+        self.get_mut_unchecked(id).rotate_cw(o_point, n_point);
     }
 }
 
