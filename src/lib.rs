@@ -119,6 +119,8 @@ impl Sweeper {
         Self::finalize_polygon(&mut context);
 
         context.draw();
+
+        assert!(Self::verify_triangles(&context));
     }
 
     fn sweep_points(context: &mut Context) {
@@ -220,9 +222,44 @@ impl Sweeper {
         Self::fill_advancing_front(point, context);
     }
 
+    /// helper function to check wether triangle is legal
+    fn is_legalize(triangle_id: TriangleId, context: &Context) -> bool {
+        for point_idx in 0..3 {
+            let triangle = context.triangles.get_unchecked(triangle_id);
+            let opposite_triangle_id = triangle.neighbors[point_idx];
+            let Some(opposite_triangle) = context.triangles.get(opposite_triangle_id) else {
+                continue;
+            };
+
+            let p = triangle.points[point_idx];
+            let op = opposite_triangle.opposite_point(&triangle, p);
+            let oi = opposite_triangle.point_index(op).unwrap();
+
+            // if this is a constrained edge or a delaunay edge(only during recursive legalization)
+            // then we should not try to legalize
+            if opposite_triangle.constrained_edge[oi] {
+                continue;
+            }
+
+            let inside = unsafe {
+                in_circle(
+                    context.points.get_point_uncheck(p),
+                    context.points.get_point_uncheck(triangle.point_ccw(p)),
+                    context.points.get_point_uncheck(triangle.point_cw(p)),
+                    context.points.get_point_uncheck(op),
+                )
+            };
+
+            if inside {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// returns whether it is changed
     fn legalize(triangle_id: TriangleId, context: &mut Context) -> bool {
-        println!("legalize {:?}", triangle_id);
         // To legalize a triangle we start by finding if any of the three edges
         // violate the Delaunay condition
         for point_idx in 0..3 {
@@ -238,12 +275,12 @@ impl Sweeper {
 
             let p = triangle.points[point_idx];
             let op = opposite_triangle.opposite_point(&triangle, p);
-
             let oi = opposite_triangle.point_index(op).unwrap();
 
             // if this is a constrained edge or a delaunay edge(only during recursive legalization)
             // then we should not try to legalize
-            if opposite_triangle.constrained_edge[oi] || opposite_triangle.delaunay_edge[oi] {
+            if opposite_triangle.constrained_edge[oi] {
+                // if opposite_triangle.constrained_edge[oi] || opposite_triangle.delaunay_edge[oi] {
                 context.triangles.set_constrained(
                     triangle_id,
                     point_idx,
@@ -472,9 +509,6 @@ impl Sweeper {
             }
         }
 
-        context.messages.push("filled right & left holes".into());
-        context.draw();
-
         // file right basins
         if let Some(basin_angle) = Self::basin_angle(node_point, context.advancing_front) {
             if basin_angle < std::f64::consts::FRAC_PI_4 * 3. {
@@ -573,7 +607,6 @@ impl Sweeper {
 
             // for now we will do all needed filling
             Self::fill_edge_event(&constrain_edge, node_point, context);
-            context.draw();
         }
 
         // node's triangle may changed, get the latest
@@ -1239,6 +1272,20 @@ impl Sweeper {
     }
 }
 
+impl Sweeper {
+    fn verify_triangles(context: &Context) -> bool {
+        let mut verify_result = true;
+        for t_id in &context.result {
+            if !Self::is_legalize(*t_id, context) {
+                println!("{} not legal", t_id.as_usize());
+                verify_result = false;
+            }
+        }
+
+        verify_result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{Read, Write};
@@ -1274,7 +1321,7 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        attach_debugger();
+        // attach_debugger();
         let file_path = "test_data/lastest_test_data";
 
         let points = if let Some(points) = try_load_from_file(file_path) {
