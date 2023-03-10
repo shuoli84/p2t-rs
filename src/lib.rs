@@ -119,23 +119,6 @@ impl Sweeper {
             &mut advancing_front,
         );
 
-        Self::sweep_points(&mut context);
-        Self::fix_triangles(&mut context);
-        context.messages.push("repair 1st".into());
-        context.draw();
-
-        Self::fix_triangles(&mut context);
-        context.messages.push("repair 2".into());
-        context.draw();
-
-        Self::fix_triangles(&mut context);
-        context.messages.push("repair 3".into());
-        context.draw();
-
-        Self::fix_triangles(&mut context);
-        context.messages.push("repair 4".into());
-        context.draw();
-
         Self::finalize_polygon(&mut context);
         context.messages.push("finalize polygon".into());
         context.draw();
@@ -232,7 +215,7 @@ impl Sweeper {
         context.triangles.mark_neighbor(node_triangle, triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
-        Self::legalize(triangle, context);
+        Self::legalize(triangle, context, None);
 
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
@@ -277,10 +260,11 @@ impl Sweeper {
         true
     }
 
-    /// returns whether it is changed
-    fn legalize(triangle_id: TriangleId, context: &mut Context) {
+    /// legalize the triangle, but keep the edge index
+    fn legalize(triangle_id: TriangleId, context: &mut Context, keep_edge_index: Option<usize>) {
         context.count_legalize_incr();
 
+        let start_triangle_id = triangle_id;
         let mut triangle_tasks = FxHashMap::default();
 
         let mut task_queue = Vec::<TriangleId>::new();
@@ -292,6 +276,12 @@ impl Sweeper {
                 println!("legalizing {triangle_id:?}");
 
                 for point_idx in 0..3 {
+                    if triangle_id == start_triangle_id
+                        && keep_edge_index.map(|i| i == point_idx).unwrap_or_default()
+                    {
+                        continue;
+                    }
+
                     let triangle = context.triangles.get_unchecked(triangle_id);
 
                     let opposite_triangle_id = triangle.neighbors[point_idx];
@@ -323,13 +313,6 @@ impl Sweeper {
                         )
                     };
                     if illegal {
-                        println!(
-                            "rotate {} and {}, from: {:?} and {:?}",
-                            triangle_id.as_usize(),
-                            opposite_triangle_id.as_usize(),
-                            triangle_id.get(&context.triangles),
-                            opposite_triangle_id.get(&context.triangles),
-                        );
                         // rotate shared edge one vertex cw to legalize it
                         Self::rotate_triangle_pair(
                             triangle_id,
@@ -338,12 +321,6 @@ impl Sweeper {
                             op,
                             context.triangles,
                         );
-                        println!(
-                            "after rotate: {:?} and {:?}",
-                            triangle_id.get(&context.triangles),
-                            opposite_triangle_id.get(&context.triangles),
-                        );
-
                         task_queue.push(triangle_id);
                         triangle_tasks.get_mut(&triangle_id).unwrap().add_assign(1);
 
@@ -466,7 +443,7 @@ impl Sweeper {
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
 
-        Self::legalize(triangle_id, context);
+        Self::legalize(triangle_id, context, None);
 
         // this node maybe shadowed by new triangle, delete it from advancing front
         let node = context.advancing_front.get_node(node_point).unwrap();
@@ -1010,8 +987,8 @@ impl Sweeper {
                         .get_mut_unchecked(ot_id)
                         .set_constrained_for_edge(ep, eq);
 
-                    Self::legalize(triangle_id, context);
-                    Self::legalize(ot_id, context);
+                    Self::legalize(triangle_id, context, None);
+                    Self::legalize(ot_id, context, None);
                 } else {
                     // original comment: I think one of the triangles should be legalized here?
                     // todo: figure this out
@@ -1049,23 +1026,12 @@ impl Sweeper {
                 .unwrap()
                 .edge_index(p, op)
                 .unwrap();
-            context.triangles.get_mut_unchecked(ot).delaunay_edge[edge_index] = true;
-            Self::legalize(ot, context);
-            context
-                .triangles
-                .get_mut_unchecked(ot)
-                .clear_delaunay_edges();
+            Self::legalize(ot, context, Some(edge_index));
             t
         } else {
             // t is not crossing edge after flip
             let edge_index = context.triangles.get(t).unwrap().edge_index(p, op).unwrap();
-            context.triangles.get_mut_unchecked(t).delaunay_edge[edge_index] = true;
-            Self::legalize(t, context);
-            context
-                .triangles
-                .get_mut_unchecked(t)
-                .clear_delaunay_edges();
-
+            Self::legalize(t, context, Some(edge_index));
             ot
         }
     }
@@ -1322,7 +1288,7 @@ impl Sweeper {
                     .triangles
                     .get_mut_unchecked(t_id)
                     .clear_delaunay_edges();
-                Sweeper::legalize(t_id, context);
+                Sweeper::legalize(t_id, context, None);
             }
         }
     }
