@@ -199,10 +199,13 @@ impl<'a> Context<'a> {
             );
 
             let color = if t.constrained_edge[2] { yellow } else { gray };
+            let color = if t.delaunay_edge[2] { black } else { color };
             draw_line_segment_mut(&mut image, p0_drifted, p1_drifted, color);
             let color = if t.constrained_edge[0] { yellow } else { gray };
+            let color = if t.delaunay_edge[0] { black } else { color };
             draw_line_segment_mut(&mut image, p1_drifted, p2_drifted, color);
             let color = if t.constrained_edge[1] { yellow } else { gray };
+            let color = if t.delaunay_edge[1] { black } else { color };
             draw_line_segment_mut(&mut image, p2_drifted, p0_drifted, color);
 
             draw_line_segment_mut(&mut image, p0, p1, blue);
