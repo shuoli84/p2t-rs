@@ -6,14 +6,33 @@ pub struct Context<'a> {
     pub triangles: &'a mut Triangles,
     pub advancing_front: &'a mut AdvancingFront,
     pub result: Vec<TriangleId>,
+
+    /// messages to add more context on the drawing, reset for each draw.
+    pub messages: Vec<String>,
 }
 
-impl Context<'_> {
+impl<'a> Context<'a> {
+    pub fn new(
+        points: &'a Points,
+        edges: &'a Edges,
+        triangles: &'a mut Triangles,
+        advancing_front: &'a mut AdvancingFront,
+    ) -> Self {
+        Self {
+            points,
+            edges,
+            triangles,
+            advancing_front,
+            result: Default::default(),
+            messages: Default::default(),
+        }
+    }
+
     #[cfg(not(feature = "draw"))]
-    pub fn draw(&self) {}
+    pub fn draw(&mut self) {}
 
     #[cfg(feature = "draw")]
-    pub fn draw(&self) {
+    pub fn draw(&mut self) {
         use image::{Rgb, RgbImage};
         use imageproc::drawing::*;
         use imageproc::rect::Rect;
@@ -26,7 +45,8 @@ impl Context<'_> {
         let gray = Rgb([180u8, 180, 180]);
         let yellow = Rgb([255u8, 255, 0]);
 
-        let mut image = RgbImage::new(800, 800);
+        // 1600 picture, 800 messages
+        let mut image = RgbImage::new(2400, 1600);
         image.fill(255);
 
         let font = Vec::from(include_bytes!("../test_files/DejaVuSans.ttf") as &[u8]);
@@ -94,8 +114,8 @@ impl Context<'_> {
             to: MapRect {
                 x: 0.,
                 y: 0.,
-                w: 800.,
-                h: 800.,
+                w: 1600.,
+                h: 1600.,
             },
         };
 
@@ -230,6 +250,12 @@ impl Context<'_> {
             draw_line_segment_mut(&mut image, p0, p1, red);
             draw_line_segment_mut(&mut image, p1, p2, red);
             draw_line_segment_mut(&mut image, p2, p0, red);
+        }
+
+        let mut y = 40;
+        for m in std::mem::take(&mut self.messages).into_iter() {
+            draw_text_mut(&mut image, black, 1600, y, Scale::uniform(20.), &font, &m);
+            y += 40;
         }
 
         static DRAW_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
