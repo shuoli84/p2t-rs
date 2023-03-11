@@ -173,7 +173,7 @@ impl Sweeper {
         // the first node is head, artificial point, so skip
         let (_, node) = context.advancing_front.nth(1)?;
 
-        let mut t = node.triangle?;
+        let mut t = node.triangle;
 
         loop {
             if let Some(tri) = context.triangles.get(t) {
@@ -232,7 +232,7 @@ impl Sweeper {
             context
                 .triangles
                 .insert(Triangle::new(point_id, node.point_id, next_node.point_id));
-        let node_triangle = node.triangle.unwrap();
+        let node_triangle = node.triangle;
         context.triangles.mark_neighbor(node_triangle, triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
@@ -410,7 +410,7 @@ impl Sweeper {
                     .get_point(triangle.point_cw(triangle.points[i]))
                     .expect("should exist");
                 if let Some(node) = context.advancing_front.locate_point_mut(point) {
-                    node.triangle = Some(triangle_id);
+                    node.triangle = triangle_id;
                 }
             }
         }
@@ -431,12 +431,10 @@ impl Sweeper {
             next_node.1.point_id,
         ));
 
-        if let Some(prev_tri) = prev_node.1.triangle {
-            context.triangles.mark_neighbor(triangle_id, prev_tri);
-        }
-        if let Some(node_tri) = node.triangle {
-            context.triangles.mark_neighbor(triangle_id, node_tri);
-        }
+        context
+            .triangles
+            .mark_neighbor(triangle_id, prev_node.1.triangle);
+        context.triangles.mark_neighbor(triangle_id, node.triangle);
 
         // update prev_node's triangle to newly created
         context
@@ -447,7 +445,7 @@ impl Sweeper {
 
         // this node maybe shadowed by new triangle, delete it from advancing front
         let node = context.advancing_front.get_node(node_point).unwrap();
-        let tri = context.triangles.get_unchecked(node.triangle.unwrap());
+        let tri = context.triangles.get_unchecked(node.triangle);
         if tri.point_index(node.point_id).is_none() || !tri.neighbor_cw(node.point_id).invalid() {
             // todo: we need to ensure all frontint node's triangle is updated. which means
             //     even for node needs to delete
@@ -577,9 +575,7 @@ impl Sweeper {
             // check and fill
             let node = context.advancing_front.get_node(node_point).unwrap();
 
-            let triangle = node
-                .triangle
-                .expect("only af's last node has None triangle id");
+            let triangle = node.triangle;
             if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
                 // the edge is already an edge of the triangle, return
                 context
@@ -597,8 +593,7 @@ impl Sweeper {
             .advancing_front
             .get_node(node_point)
             .unwrap()
-            .triangle
-            .expect("only af's last node has None triangle id");
+            .triangle;
 
         // this triangle crosses constraint so let's flippin start!
         let mut triangle_ids = Vec::<TriangleId>::new();

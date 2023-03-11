@@ -62,7 +62,7 @@ impl PointKey {
 #[derive(Debug)]
 pub struct Node {
     pub point_id: PointId,
-    pub triangle: Option<TriangleId>,
+    pub triangle: TriangleId,
 }
 
 impl AdvancingFront {
@@ -85,21 +85,21 @@ impl AdvancingFront {
             first_point.into(),
             Node {
                 point_id: triangle.points[1],
-                triangle: Some(triangle_id),
+                triangle: triangle_id,
             },
         );
         nodes.insert(
             middle_point.into(),
             Node {
                 point_id: triangle.points[0],
-                triangle: Some(triangle_id),
+                triangle: triangle_id,
             },
         );
         nodes.insert(
             tail_node.into(),
             Node {
                 point_id: triangle.points[2],
-                triangle: None,
+                triangle: TriangleId::INVALID,
             },
         );
 
@@ -109,11 +109,12 @@ impl AdvancingFront {
     /// insert a new node for point and triangle
     /// or update the node pointing to new triangle
     pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
+        assert!(!triangle_id.invalid());
         self.nodes.insert(
             point.into(),
             Node {
                 point_id,
-                triangle: Some(triangle_id),
+                triangle: triangle_id,
             },
         );
     }
