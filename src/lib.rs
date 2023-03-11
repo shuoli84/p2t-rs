@@ -20,6 +20,7 @@ use utils::{in_circle, orient_2d, Orientation};
 use crate::utils::in_scan_area;
 
 pub use points::PointId;
+pub use shape::Point;
 
 pub struct SweeperBuilder {
     edges_builder: EdgesBuilder,
@@ -127,7 +128,6 @@ impl Sweeper {
         context.messages.push("finalize polygon".into());
         context.draw();
 
-        dbg!(&context.statistic);
         assert!(Self::verify_result(&context));
     }
 
@@ -208,7 +208,6 @@ impl Sweeper {
 /// Point event related methods
 impl Sweeper {
     fn point_event(point_id: PointId, point: Point, context: &mut Context) {
-        println!("\npoint event: {point_id:?} {point:?}");
         context
             .messages
             .push(format!("point event: {point_id:?} {point:?}"));
@@ -271,11 +270,6 @@ impl Sweeper {
 
     /// legalize the triangle, but keep the edge index
     fn legalize(triangle_id: TriangleId, context: &mut Context, keep_edge_index: Option<usize>) {
-        println!(
-            "legalizing {} with {keep_edge_index:?}",
-            triangle_id.as_usize()
-        );
-
         let start_triangle_id = triangle_id;
         let mut triangle_tasks = FxHashMap::default();
 
@@ -285,7 +279,6 @@ impl Sweeper {
 
         while let Some(triangle_id) = task_queue.pop() {
             let mut f = || {
-                println!("legalizing {triangle_id:?}");
                 context.count_legalize_incr();
 
                 for point_idx in 0..3 {
@@ -326,13 +319,6 @@ impl Sweeper {
                         )
                     };
                     if illegal {
-                        println!(
-                            "rotating: {} {} from:{:?} {:?}",
-                            triangle_id.as_usize(),
-                            opposite_triangle_id.as_usize(),
-                            triangle_id.get(&context.triangles),
-                            opposite_triangle_id.get(&context.triangles),
-                        );
                         // rotate shared edge one vertex cw to legalize it
                         Self::rotate_triangle_pair(
                             triangle_id,
@@ -342,13 +328,6 @@ impl Sweeper {
                             context.triangles,
                         );
 
-                        println!(
-                            "  after: {} {} after:{:?} {:?}",
-                            triangle_id.as_usize(),
-                            opposite_triangle_id.as_usize(),
-                            triangle_id.get(&context.triangles),
-                            opposite_triangle_id.get(&context.triangles),
-                        );
                         task_queue.push(triangle_id);
                         triangle_tasks.get_mut(&triangle_id).unwrap().add_assign(1);
 
@@ -365,10 +344,6 @@ impl Sweeper {
             *task_count -= 1;
 
             if *task_count == 0 {
-                println!("triangle {} done", triangle_id.as_usize());
-                if triangle_id.as_usize() == 123 {
-                    println!("break here");
-                }
                 Self::map_triangle_to_nodes(triangle_id, context);
             }
         }
@@ -466,15 +441,6 @@ impl Sweeper {
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
 
-        println!(
-            "create tri: {} {:?} nei: {:?} {:?} {:?}",
-            triangle_id.as_usize(),
-            triangle_id.get(&context.triangles),
-            triangle_id.get(&context.triangles).neighbors[0].try_get(&context.triangles),
-            triangle_id.get(&context.triangles).neighbors[1].try_get(&context.triangles),
-            triangle_id.get(&context.triangles).neighbors[2].try_get(&context.triangles),
-        );
-
         Self::legalize(triangle_id, context, None);
 
         // this node maybe shadowed by new triangle, delete it from advancing front
@@ -490,7 +456,6 @@ impl Sweeper {
             // is not a valid front node.
             // 2.
             // node's triangle has a valid neighbor, which means the edge is not on the front
-            println!("deleting {node_point:?} from advancing front");
             context.advancing_front.delete(node_point);
         }
         Some(())
@@ -596,8 +561,6 @@ impl ConstrainedEdge {
 /// EdgeEvent related methods
 impl Sweeper {
     fn edge_event(edge: Edge, node_point: Point, context: &mut Context) {
-        println!("\nedge event: {edge:?}");
-
         context.messages.push(format!(
             "edge_event: p:{} q:{} node:{:?}",
             edge.p.as_usize(),
@@ -1025,15 +988,7 @@ impl Sweeper {
 
         let t = context.triangles.get_unchecked(triangle_id);
 
-        println!(
-            "getting neighbor_across tri:{} p:{}",
-            triangle_id.as_usize(),
-            p.as_usize()
-        );
         let ot_id = t.neighbor_across(p);
-        if ot_id.invalid() {
-            println!("invalid neighbor: {} {t:?}", triangle_id.as_usize());
-        }
         assert!(!ot_id.invalid(), "neighbor must be valid");
 
         let ot = context.triangles.get_unchecked(ot_id);
@@ -1298,8 +1253,6 @@ impl Sweeper {
         if basin.completed(node) {
             return None;
         }
-
-        println!("filling basin req {node:?} basin: {basin:?}");
 
         Self::fill_one(node, context);
 

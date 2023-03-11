@@ -110,7 +110,6 @@ impl Triangle {
         } else if point == self.points[2] {
             self.points[0]
         } else {
-            println!("point({point:?}) not belongs to triangle {self:?}");
             panic!("point not belongs to triangle");
         }
     }
@@ -212,7 +211,6 @@ impl Triangle {
         } else if p == self.points[2] {
             self.neighbors[0]
         } else {
-            println!("point({p:?}) not belongs to triangle {self:?}");
             panic!("point not belongs to triangle");
         }
     }
@@ -220,7 +218,6 @@ impl Triangle {
     /// neighbor counter clockwise to given point
     pub fn neighbor_across(&self, p: PointId) -> TriangleId {
         let Some(point_index) = self.point_index(p) else {
-            println!("{p:?} not found in {self:?}");
             panic!("break here");
         };
         self.neighbors[point_index]
@@ -241,7 +238,6 @@ impl Triangle {
             self.points[2] = self.points[1];
             self.points[1] = n_point;
         } else {
-            println!("triangle: {self:?} old_point: {o_point:?}");
             panic!("point not belongs to triangle")
         }
     }
