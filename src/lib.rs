@@ -6,13 +6,11 @@ mod shape;
 mod triangles;
 mod utils;
 
-use std::ops::AddAssign;
-
 use advancing_front::AdvancingFront;
 use context::Context;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
-use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::{in_circle, orient_2d, Orientation};
@@ -238,7 +236,7 @@ impl Sweeper {
         context.triangles.mark_neighbor(node_triangle, triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
-        Self::legalize(triangle, context, None);
+        Self::legalize(triangle, context);
 
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
@@ -284,25 +282,20 @@ impl Sweeper {
     }
 
     /// legalize the triangle, but keep the edge index
-    fn legalize(triangle_id: TriangleId, context: &mut Context, keep_edge_index: Option<usize>) {
-        let start_triangle_id = triangle_id;
-        let mut triangle_tasks = FxHashMap::default();
+    fn legalize(triangle_id: TriangleId, context: &mut Context) {
+        // keeps record of all touched triangles, after legalize finished
+        // need to remap all to the advancing front
+        let mut legalized_triangles = FxHashSet::default();
 
         let mut task_queue = Vec::<TriangleId>::new();
         task_queue.push(triangle_id);
-        triangle_tasks.insert(triangle_id, 1);
+        legalized_triangles.insert(triangle_id);
 
         while let Some(triangle_id) = task_queue.pop() {
             let mut f = || {
                 context.count_legalize_incr();
 
                 for point_idx in 0..3 {
-                    if triangle_id == start_triangle_id
-                        && keep_edge_index.map(|i| i == point_idx).unwrap_or_default()
-                    {
-                        continue;
-                    }
-
                     let triangle = context.triangles.get_unchecked(triangle_id);
 
                     let opposite_triangle_id = triangle.neighbors[point_idx];
@@ -344,23 +337,17 @@ impl Sweeper {
                         );
 
                         task_queue.push(triangle_id);
-                        triangle_tasks.get_mut(&triangle_id).unwrap().add_assign(1);
-
+                        legalized_triangles.insert(triangle_id);
                         task_queue.push(opposite_triangle_id);
-                        triangle_tasks
-                            .entry(opposite_triangle_id)
-                            .or_insert(0)
-                            .add_assign(1);
+                        legalized_triangles.insert(opposite_triangle_id);
                     }
                 }
             };
             f();
-            let task_count = triangle_tasks.get_mut(&triangle_id).unwrap();
-            *task_count -= 1;
+        }
 
-            if *task_count == 0 {
-                Self::map_triangle_to_nodes(triangle_id, context);
-            }
+        for triangle_id in legalized_triangles {
+            Self::map_triangle_to_nodes(triangle_id, context);
         }
     }
 
@@ -456,7 +443,7 @@ impl Sweeper {
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
 
-        Self::legalize(triangle_id, context, None);
+        Self::legalize(triangle_id, context);
 
         // this node maybe shadowed by new triangle, delete it from advancing front
         let node = context.advancing_front.get_node(node_point).unwrap();
@@ -626,7 +613,7 @@ impl Sweeper {
         );
 
         for triangle_id in triangle_ids {
-            Self::legalize(triangle_id, context, None);
+            Self::legalize(triangle_id, context);
         }
     }
 
