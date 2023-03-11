@@ -220,6 +220,7 @@ impl Triangle {
     /// neighbor counter clockwise to given point
     pub fn neighbor_across(&self, p: PointId) -> TriangleId {
         let Some(point_index) = self.point_index(p) else {
+            println!("{p:?} not found in {self:?}");
             panic!("break here");
         };
         self.neighbors[point_index]

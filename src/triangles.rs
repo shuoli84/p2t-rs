@@ -15,6 +15,10 @@ impl TriangleId {
         triangles.get_unchecked(*self)
     }
 
+    pub fn try_get<'a, 'b>(&'a self, triangles: &'b Triangles) -> Option<&'b Triangle> {
+        triangles.get(*self)
+    }
+
     pub fn as_usize(&self) -> usize {
         self.0
     }
@@ -95,10 +99,6 @@ impl Triangles {
 
     pub fn set_constrained(&mut self, id: TriangleId, index: usize, val: bool) {
         self.get_mut_unchecked(id).constrained_edge[index] = val;
-    }
-
-    pub fn legalize(&mut self, id: TriangleId, o_point: PointId, n_point: PointId) {
-        self.get_mut_unchecked(id).rotate_cw(o_point, n_point);
     }
 }
 

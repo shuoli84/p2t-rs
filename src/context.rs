@@ -164,7 +164,7 @@ impl<'a> Context<'a> {
             let p2 = map.map_point_f32(p2.x, p2.y);
             let center = ((p0.0 + p1.0 + p2.0) / 3., (p0.1 + p1.1 + p2.1) / 3.);
 
-            let point_percent = 0.8;
+            let point_percent = 0.5;
             let center_percent = 1. - point_percent;
 
             let p0_drifted = (
@@ -180,41 +180,14 @@ impl<'a> Context<'a> {
                 center.1 * center_percent + p2.1 * point_percent,
             );
 
-            draw_text_mut(
-                &mut image,
-                black,
-                p0_drifted.0 as i32,
-                p0_drifted.1 as i32,
-                Scale::uniform(10.),
-                &font,
-                "0",
-            );
-
-            draw_text_mut(
-                &mut image,
-                black,
-                p1_drifted.0 as i32,
-                p1_drifted.1 as i32,
-                Scale::uniform(10.),
-                &font,
-                "1",
-            );
-
-            draw_text_mut(
-                &mut image,
-                black,
-                p2_drifted.0 as i32,
-                p2_drifted.1 as i32,
-                Scale::uniform(10.),
-                &font,
-                "2",
-            );
-
             let color = if t.constrained_edge[2] { yellow } else { gray };
+            let color = if t.neighbors[2].invalid() { red } else { color };
             draw_line_segment_mut(&mut image, p0_drifted, p1_drifted, color);
             let color = if t.constrained_edge[0] { yellow } else { gray };
+            let color = if t.neighbors[0].invalid() { red } else { color };
             draw_line_segment_mut(&mut image, p1_drifted, p2_drifted, color);
             let color = if t.constrained_edge[1] { yellow } else { gray };
+            let color = if t.neighbors[1].invalid() { red } else { color };
             draw_line_segment_mut(&mut image, p2_drifted, p0_drifted, color);
 
             draw_line_segment_mut(&mut image, p0, p1, blue);

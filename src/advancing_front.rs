@@ -107,6 +107,7 @@ impl AdvancingFront {
     }
 
     /// insert a new node for point and triangle
+    /// or update the node pointing to new triangle
     pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
         self.nodes.insert(
             point.into(),

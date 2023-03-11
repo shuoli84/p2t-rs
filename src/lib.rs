@@ -119,6 +119,10 @@ impl Sweeper {
             &mut advancing_front,
         );
 
+        Self::sweep_points(&mut context);
+        context.messages.push("sweep done".into());
+        context.draw();
+
         Self::finalize_polygon(&mut context);
         context.messages.push("finalize polygon".into());
         context.draw();
@@ -138,7 +142,12 @@ impl Sweeper {
                 context.draw();
             }
 
-            assert!(Self::verify_triangles(&context));
+            // if !Self::verify_triangles(context) {
+            //     Self::fix_triangles(context);
+            //     context.messages.push("fix invalid triangles".into());
+            //     context.draw();
+            // }
+            assert!(Self::verify_triangles(context));
         }
     }
 
@@ -262,7 +271,10 @@ impl Sweeper {
 
     /// legalize the triangle, but keep the edge index
     fn legalize(triangle_id: TriangleId, context: &mut Context, keep_edge_index: Option<usize>) {
-        context.count_legalize_incr();
+        println!(
+            "legalizing {} with {keep_edge_index:?}",
+            triangle_id.as_usize()
+        );
 
         let start_triangle_id = triangle_id;
         let mut triangle_tasks = FxHashMap::default();
@@ -274,6 +286,7 @@ impl Sweeper {
         while let Some(triangle_id) = task_queue.pop() {
             let mut f = || {
                 println!("legalizing {triangle_id:?}");
+                context.count_legalize_incr();
 
                 for point_idx in 0..3 {
                     if triangle_id == start_triangle_id
@@ -313,6 +326,13 @@ impl Sweeper {
                         )
                     };
                     if illegal {
+                        println!(
+                            "rotating: {} {} from:{:?} {:?}",
+                            triangle_id.as_usize(),
+                            opposite_triangle_id.as_usize(),
+                            triangle_id.get(&context.triangles),
+                            opposite_triangle_id.get(&context.triangles),
+                        );
                         // rotate shared edge one vertex cw to legalize it
                         Self::rotate_triangle_pair(
                             triangle_id,
@@ -320,6 +340,14 @@ impl Sweeper {
                             opposite_triangle_id,
                             op,
                             context.triangles,
+                        );
+
+                        println!(
+                            "  after: {} {} after:{:?} {:?}",
+                            triangle_id.as_usize(),
+                            opposite_triangle_id.as_usize(),
+                            triangle_id.get(&context.triangles),
+                            opposite_triangle_id.get(&context.triangles),
                         );
                         task_queue.push(triangle_id);
                         triangle_tasks.get_mut(&triangle_id).unwrap().add_assign(1);
@@ -334,11 +362,14 @@ impl Sweeper {
             };
             f();
             let task_count = triangle_tasks.get_mut(&triangle_id).unwrap();
-            if *task_count == 1 {
+            *task_count -= 1;
+
+            if *task_count == 0 {
                 println!("triangle {} done", triangle_id.as_usize());
+                if triangle_id.as_usize() == 123 {
+                    println!("break here");
+                }
                 Self::map_triangle_to_nodes(triangle_id, context);
-            } else {
-                *task_count -= 1;
             }
         }
     }
@@ -364,27 +395,26 @@ impl Sweeper {
         let ce4 = ot.constrained_edge_cw(op);
 
         // rotate shared edge one vertex cw to legalize it
-        triangles.legalize(triangle_id, p, op);
-        triangles.legalize(ot_id, op, p);
-
         let t = triangles.get_mut_unchecked(triangle_id);
+        t.rotate_cw(p, op);
         t.set_constrained_edge_cw(p, ce2);
         t.set_constrained_edge_ccw(op, ce3);
         t.clear_neighbors();
 
         let ot = triangles.get_mut_unchecked(ot_id);
+        ot.rotate_cw(op, p);
         ot.set_constrained_edge_ccw(p, ce1);
         ot.set_constrained_edge_cw(op, ce4);
         ot.clear_neighbors();
 
-        if !n1.invalid() {
-            triangles.mark_neighbor(ot_id, n1);
-        }
         if !n2.invalid() {
             triangles.mark_neighbor(triangle_id, n2);
         }
         if !n3.invalid() {
             triangles.mark_neighbor(triangle_id, n3);
+        }
+        if !n1.invalid() {
+            triangles.mark_neighbor(ot_id, n1);
         }
         if !n4.invalid() {
             triangles.mark_neighbor(ot_id, n4);
@@ -430,9 +460,20 @@ impl Sweeper {
         if let Some(node_tri) = node.triangle {
             context.triangles.mark_neighbor(triangle_id, node_tri);
         }
+
+        // update prev_node's triangle to newly created
         context
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
+
+        println!(
+            "create tri: {} {:?} nei: {:?} {:?} {:?}",
+            triangle_id.as_usize(),
+            triangle_id.get(&context.triangles),
+            triangle_id.get(&context.triangles).neighbors[0].try_get(&context.triangles),
+            triangle_id.get(&context.triangles).neighbors[1].try_get(&context.triangles),
+            triangle_id.get(&context.triangles).neighbors[2].try_get(&context.triangles),
+        );
 
         Self::legalize(triangle_id, context, None);
 
@@ -555,7 +596,7 @@ impl ConstrainedEdge {
 /// EdgeEvent related methods
 impl Sweeper {
     fn edge_event(edge: Edge, node_point: Point, context: &mut Context) {
-        println!("edge event: {edge:?}");
+        println!("\nedge event: {edge:?}");
 
         context.messages.push(format!(
             "edge_event: p:{} q:{} node:{:?}",
@@ -600,7 +641,22 @@ impl Sweeper {
             .unwrap()
             .triangle
             .expect("only af's last node has None triangle id");
-        Self::edge_event_process(edge.p, edge.q, &constrain_edge, triangle, edge.q, context);
+
+        // this triangle crosses constraint so let's flippin start!
+        let mut triangle_ids = Vec::<TriangleId>::new();
+        Self::edge_event_process(
+            edge.p,
+            edge.q,
+            &constrain_edge,
+            triangle,
+            edge.q,
+            &mut triangle_ids,
+            context,
+        );
+
+        for triangle_id in triangle_ids {
+            Self::legalize(triangle_id, context, None);
+        }
     }
 
     /// try mark edge for triangle if the constrained edge already is a edge
@@ -858,6 +914,7 @@ impl Sweeper {
         constrain_edge: &ConstrainedEdge,
         triangle_id: TriangleId,
         p: PointId,
+        triangle_ids: &mut Vec<TriangleId>,
         context: &mut Context,
     ) {
         assert!(!triangle_id.invalid());
@@ -885,6 +942,7 @@ impl Sweeper {
                     &constrain_edge.with_q(p1, context),
                     neighbor_across_t,
                     p1,
+                    triangle_ids,
                     context,
                 );
                 return;
@@ -910,6 +968,7 @@ impl Sweeper {
                     &constrain_edge.with_q(p2, context),
                     neighbor_across_t,
                     p2,
+                    triangle_ids,
                     context,
                 );
 
@@ -928,10 +987,25 @@ impl Sweeper {
                 triangle.neighbor_cw(p)
             };
 
-            Self::edge_event_process(ep, eq, constrain_edge, triangle_id, p, context);
+            Self::edge_event_process(
+                ep,
+                eq,
+                constrain_edge,
+                triangle_id,
+                p,
+                triangle_ids,
+                context,
+            );
         } else {
-            // this triangle crosses constraint so let's flippin start!
-            Self::flip_edge_event(ep, eq, constrain_edge, triangle_id, p, context);
+            Self::flip_edge_event(
+                ep,
+                eq,
+                constrain_edge,
+                triangle_id,
+                p,
+                triangle_ids,
+                context,
+            );
         }
     }
 }
@@ -944,14 +1018,24 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         triangle_id: TriangleId,
         p: PointId,
+        triangle_ids: &mut Vec<TriangleId>,
         context: &mut Context,
     ) {
         assert!(!triangle_id.invalid());
 
         let t = context.triangles.get_unchecked(triangle_id);
 
+        println!(
+            "getting neighbor_across tri:{} p:{}",
+            triangle_id.as_usize(),
+            p.as_usize()
+        );
         let ot_id = t.neighbor_across(p);
+        if ot_id.invalid() {
+            println!("invalid neighbor: {} {t:?}", triangle_id.as_usize());
+        }
         assert!(!ot_id.invalid(), "neighbor must be valid");
+
         let ot = context.triangles.get_unchecked(ot_id);
 
         let op = ot.opposite_point(t, p);
@@ -965,6 +1049,8 @@ impl Sweeper {
             Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles);
             Self::map_triangle_to_nodes(triangle_id, context);
             Self::map_triangle_to_nodes(ot_id, context);
+            // legalize later
+            triangle_ids.extend([triangle_id, ot_id]);
 
             if p == eq && op == ep {
                 if eq == edge.q_id() && ep == edge.p_id() {
@@ -977,9 +1063,6 @@ impl Sweeper {
                         .triangles
                         .get_mut_unchecked(ot_id)
                         .set_constrained_for_edge(ep, eq);
-
-                    Self::legalize(triangle_id, context, None);
-                    Self::legalize(ot_id, context, None);
                 } else {
                     // original comment: I think one of the triangles should be legalized here?
                     // todo: figure this out
@@ -991,13 +1074,22 @@ impl Sweeper {
                     ep.get(&context.points),
                 );
 
-                let t = Self::next_flip_triangle(o, triangle_id, ot_id, p, op, context);
-                Self::flip_edge_event(ep, eq, edge, t, p, context);
+                let t = Self::next_flip_triangle(o, triangle_id, ot_id, triangle_ids);
+                Self::flip_edge_event(ep, eq, edge, t, p, triangle_ids, context);
             }
         } else {
             let new_p = Self::next_flip_point(ep, eq, ot_id, op, context);
-            Self::flip_scan_edge_event(ep, eq, edge, triangle_id, ot_id, new_p, context);
-            Self::edge_event_process(ep, eq, edge, triangle_id, p, context);
+            Self::flip_scan_edge_event(
+                ep,
+                eq,
+                edge,
+                triangle_id,
+                ot_id,
+                new_p,
+                triangle_ids,
+                context,
+            );
+            Self::edge_event_process(ep, eq, edge, triangle_id, p, triangle_ids, context);
         }
     }
 
@@ -1005,24 +1097,15 @@ impl Sweeper {
         o: Orientation,
         t: TriangleId,
         ot: TriangleId,
-        p: PointId,
-        op: PointId,
-        context: &mut Context,
+        triangle_ids: &mut Vec<TriangleId>,
     ) -> TriangleId {
         if o.is_ccw() {
             // ot is not crossing edge after flip
-            let edge_index = context
-                .triangles
-                .get(ot)
-                .unwrap()
-                .edge_index(p, op)
-                .unwrap();
-            Self::legalize(ot, context, Some(edge_index));
+            triangle_ids.push(ot);
             t
         } else {
             // t is not crossing edge after flip
-            let edge_index = context.triangles.get(t).unwrap().edge_index(p, op).unwrap();
-            Self::legalize(t, context, Some(edge_index));
+            triangle_ids.push(t);
             ot
         }
     }
@@ -1063,6 +1146,7 @@ impl Sweeper {
         flip_triangle_id: TriangleId,
         t_id: TriangleId,
         p: PointId,
+        triangle_ids: &mut Vec<TriangleId>,
         context: &mut Context,
     ) {
         let t = t_id.get(&context.triangles);
@@ -1083,7 +1167,7 @@ impl Sweeper {
             op.get(&context.points),
         ) {
             // flip with new edge op -> eq
-            Self::flip_edge_event(eq, op, edge, ot, op, context);
+            Self::flip_edge_event(eq, op, edge, ot, op, triangle_ids, context);
 
             // original comment:
             // TODO: Actually I just figured out that it should be possible to
@@ -1095,7 +1179,16 @@ impl Sweeper {
             // so it will have to wait.
         } else {
             let new_p = Self::next_flip_point(ep, eq, ot, op, context);
-            Self::flip_scan_edge_event(ep, eq, edge, flip_triangle_id, ot, new_p, context);
+            Self::flip_scan_edge_event(
+                ep,
+                eq,
+                edge,
+                flip_triangle_id,
+                ot,
+                new_p,
+                triangle_ids,
+                context,
+            );
         }
     }
 }
@@ -1172,7 +1265,7 @@ impl Sweeper {
         // find the right
         let mut right = bottom;
         while let Some((next_node_point, _)) = context.advancing_front.next_node(right) {
-            if bottom.y < next_node_point.y {
+            if right.y < next_node_point.y {
                 right = next_node_point;
             } else {
                 break;
@@ -1206,7 +1299,7 @@ impl Sweeper {
             return None;
         }
 
-        println!("filling basin req {node:?}");
+        println!("filling basin req {node:?} basin: {basin:?}");
 
         Self::fill_one(node, context);
 
@@ -1363,7 +1456,7 @@ mod tests {
 
         builder.build().triangulate();
 
-        // delete_file(file_path);
+        delete_file(file_path);
     }
 
     fn try_load_from_file(path: &str) -> Option<Vec<Point>> {
