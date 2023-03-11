@@ -121,32 +121,51 @@ impl Sweeper {
         );
 
         Self::sweep_points(&mut context);
-        context.messages.push("sweep done".into());
-        context.draw();
+
+        #[cfg(feature = "draw")]
+        {
+            context.messages.push("sweep done".into());
+            context.draw();
+        }
 
         Self::finalize_polygon(&mut context);
-        context.messages.push("finalize polygon".into());
-        context.draw();
-
-        assert!(Self::verify_result(&context));
+        #[cfg(feature = "draw")]
+        {
+            context.messages.push("finalize polygon".into());
+            context.draw();
+        }
     }
 
     fn sweep_points(context: &mut Context) {
         for (point_id, point) in context.points.iter_point_by_y(1) {
             Self::point_event(point_id, point, context);
-            context.draw();
+
+            #[cfg(feature = "draw")]
+            {
+                context
+                    .messages
+                    .push(format!("point event: {point_id:?} {point:?}"));
+
+                context.draw();
+            }
 
             for p in context.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
                 Self::edge_event(edge, point, context);
-                context.draw();
+
+                #[cfg(feature = "draw")]
+                {
+                    context.messages.push(format!(
+                        "edge_event: p:{} q:{} node:{:?}",
+                        edge.p.as_usize(),
+                        edge.q.as_usize(),
+                        node_point
+                    ));
+
+                    context.draw();
+                }
             }
 
-            // if !Self::verify_triangles(context) {
-            //     Self::fix_triangles(context);
-            //     context.messages.push("fix invalid triangles".into());
-            //     context.draw();
-            // }
             assert!(Self::verify_triangles(context));
         }
     }
@@ -208,10 +227,6 @@ impl Sweeper {
 /// Point event related methods
 impl Sweeper {
     fn point_event(point_id: PointId, point: Point, context: &mut Context) {
-        context
-            .messages
-            .push(format!("point event: {point_id:?} {point:?}"));
-
         let (node_point, node) = context.advancing_front.locate_node(point.x).unwrap();
         let (_, next_node) = context.advancing_front.next_node(node_point).unwrap();
 
@@ -561,13 +576,6 @@ impl ConstrainedEdge {
 /// EdgeEvent related methods
 impl Sweeper {
     fn edge_event(edge: Edge, node_point: Point, context: &mut Context) {
-        context.messages.push(format!(
-            "edge_event: p:{} q:{} node:{:?}",
-            edge.p.as_usize(),
-            edge.q.as_usize(),
-            node_point
-        ));
-
         let p = context.points.get_point(edge.p).unwrap();
         let q = context.points.get_point(edge.q).unwrap();
 
@@ -1292,7 +1300,9 @@ impl Sweeper {
 }
 
 impl Sweeper {
-    fn verify_triangles(context: &Context) -> bool {
+    /// verify all triangles stored in context are legal
+    #[allow(unused)]
+    pub fn verify_triangles(context: &Context) -> bool {
         let triangle_ids = context
             .triangles
             .iter()
@@ -1309,33 +1319,6 @@ impl Sweeper {
         }
 
         result
-    }
-
-    fn fix_triangles(context: &mut Context) {
-        let triangle_ids = context
-            .triangles
-            .iter()
-            .map(|(t_id, _)| t_id)
-            .collect::<Vec<_>>();
-
-        for t_id in triangle_ids {
-            if !Self::is_legalize(t_id, context) {
-                println!("{} not legal, fix it", t_id.as_usize());
-                Sweeper::legalize(t_id, context, None);
-            }
-        }
-    }
-
-    fn verify_result(context: &Context) -> bool {
-        let mut verify_result = true;
-        for t_id in &context.result {
-            if !Self::is_legalize(*t_id, context) {
-                println!("{} not legal", t_id.as_usize());
-                verify_result = false;
-            }
-        }
-
-        verify_result
     }
 }
 

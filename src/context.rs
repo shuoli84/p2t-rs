@@ -40,9 +40,6 @@ impl<'a> Context<'a> {
         self.statistic.legalize_count += 1;
     }
 
-    #[cfg(not(feature = "draw"))]
-    pub fn draw(&mut self) {}
-
     #[cfg(feature = "draw")]
     pub fn draw(&mut self) {
         use image::{Rgb, RgbImage};
