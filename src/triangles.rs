@@ -1,4 +1,4 @@
-use crate::{shape::Triangle, PointId};
+use crate::shape::Triangle;
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TriangleId(usize);

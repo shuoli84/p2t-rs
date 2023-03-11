@@ -1160,7 +1160,6 @@ impl Sweeper {
 struct Basin {
     left: Point,
     right: Point,
-    bottom: Point,
     width: f64,
     left_higher: bool,
 }
@@ -1247,7 +1246,6 @@ impl Sweeper {
             &Basin {
                 left,
                 right,
-                bottom,
                 width,
                 left_higher,
             },
@@ -1331,31 +1329,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_context() {
-        let polyline = vec![
-            Point::new(0., 0.),
-            Point::new(200., 0.),
-            Point::new(100., 400.),
-            Point::new(0., 400.),
-            Point::new(30., 300.),
-            Point::new(140., 110.),
-        ];
-        let builder = SweeperBuilder::new(polyline);
-        let mut sweeper = builder.build();
-        sweeper.triangulate();
-    }
-
-    #[test]
-    fn test_forever_rand() {
-        let mut idx = 0;
-        loop {
-            idx += 1;
-            println!("run {idx}");
-            test_rand();
-        }
-    }
-
-    #[test]
     fn test_rand() {
         // attach_debugger();
         let file_path = "test_data/lastest_test_data";
@@ -1432,18 +1405,5 @@ mod tests {
 
     fn delete_file(path: &str) {
         std::fs::remove_file(path).unwrap();
-    }
-
-    fn attach_debugger() {
-        let url = format!(
-            "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','pid':{}}}",
-            std::process::id()
-        );
-        std::process::Command::new("code")
-            .arg("--open-url")
-            .arg(url)
-            .output()
-            .unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1)); // Wait for debugger to attach
     }
 }
