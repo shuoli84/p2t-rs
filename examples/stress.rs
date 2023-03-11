@@ -31,22 +31,22 @@ fn test_rand() {
         save_to_file(&points, file_path);
         points
     };
-    let mut builder = SweeperBuilder::new(vec![
+    let mut sweeper = SweeperBuilder::new(vec![
         Point::new(-10., -10.),
         Point::new(810., -10.),
         Point::new(810., 810.),
         Point::new(-10., 810.),
-    ]);
-    for p in points {
-        builder.add_point(p);
-    }
-    builder.add_hole(vec![
+    ])
+    .add_points(points)
+    .add_hole(vec![
         Point::new(400., 400.),
         Point::new(600., 400.),
         Point::new(600., 600.),
         Point::new(400., 600.),
-    ]);
-    builder.build().triangulate();
+    ])
+    .build();
+
+    sweeper.triangulate();
     delete_file(file_path);
 }
 

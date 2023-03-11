@@ -13,16 +13,12 @@ rusttype = { version = "0.9", optional = true }
 
 [dev-dependencies]
 rand = "0.8"
+criterion = { version = "0.4", features = ["html_reports"] }
+
+[[bench]]
+name = "bench"
+harness = false
 
 [features]
 default = []
 draw = ["imageproc", "image", "rusttype"]
-
-[profile.dev.package.image]
-opt-level = 3
-
-[profile.dev.package.imageproc]
-opt-level = 3
-
-[profile.dev.package.rusttype]
-opt-level = 3

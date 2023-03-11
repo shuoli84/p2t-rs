@@ -16,23 +16,25 @@ impl PointId {
     }
 }
 
-/// Point store, provide a unique [`PointId`]
+/// Point store
 #[derive(Debug, Default)]
 pub struct Points {
     points: Vec<Point>,
-    sorted_ids: Vec<PointId>,
+    y_sorted: Vec<PointId>,
     pub head: Point,
     pub tail: Point,
 }
 
 impl Points {
+    /// Head point is the head virtual point
     pub const HEAD_ID: PointId = PointId(usize::MAX);
+    /// Head point is the tail virtual point
     pub const TAIL_ID: PointId = PointId(usize::MAX - 1);
 
     pub fn new(points: Vec<Point>) -> Self {
         Self {
             points,
-            sorted_ids: vec![],
+            y_sorted: vec![],
             head: Default::default(),
             tail: Default::default(),
         }
@@ -90,16 +92,28 @@ impl Points {
 
         Self {
             points: self.points,
-            sorted_ids,
+            y_sorted: sorted_ids,
             head,
             tail,
         }
     }
 
+    /// Add a point
     pub fn add_point(&mut self, point: Point) -> PointId {
         let point_id = PointId(self.points.len());
         self.points.push(point);
         point_id
+    }
+
+    /// Add all `points`
+    pub fn add_points(
+        &mut self,
+        points: impl IntoIterator<Item = Point>,
+    ) -> impl Iterator<Item = PointId> + 'static {
+        let start_point = PointId(self.points.len());
+        self.points.extend(points);
+        let end_point = PointId(self.points.len());
+        PointRangeIter::new(start_point, end_point)
     }
 
     /// get point for id
@@ -126,7 +140,7 @@ impl Points {
 
     /// get point by y order
     pub fn get_point_by_y(&self, order: usize) -> Option<Point> {
-        let id = self.sorted_ids.get(order)?;
+        let id = self.y_sorted.get(order)?;
         Some(self.points[id.0])
     }
 
@@ -134,7 +148,7 @@ impl Points {
         &'a self,
         order: usize,
     ) -> impl Iterator<Item = (PointId, Point)> + 'a {
-        self.sorted_ids.iter().skip(order).map(|id| {
+        self.y_sorted.iter().skip(order).map(|id| {
             let point = self.points[id.0];
             (*id, point)
         })
@@ -143,7 +157,7 @@ impl Points {
     /// get point by y order
     /// Not including head, tail
     pub fn get_id_by_y(&self, order: usize) -> Option<PointId> {
-        self.sorted_ids.get(order).cloned()
+        self.y_sorted.get(order).cloned()
     }
 
     /// iter all points
@@ -152,6 +166,36 @@ impl Points {
             .iter()
             .enumerate()
             .map(|(idx, p)| (PointId(idx), p))
+    }
+}
+
+struct PointRangeIter {
+    start: PointId,
+    end: PointId,
+    next: PointId,
+}
+
+impl PointRangeIter {
+    fn new(start: PointId, end: PointId) -> Self {
+        Self {
+            start,
+            end,
+            next: start,
+        }
+    }
+}
+
+impl Iterator for PointRangeIter {
+    type Item = PointId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.next;
+        if next != self.end {
+            self.next.0 += 1;
+            Some(next)
+        } else {
+            None
+        }
     }
 }
 

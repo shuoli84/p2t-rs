@@ -8,63 +8,6 @@ pub struct AdvancingFront {
     nodes: BTreeMap<PointKey, Node>,
 }
 
-impl std::fmt::Debug for AdvancingFront {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<AdvancingFront ")?;
-        for (p, _) in &self.nodes {
-            write!(f, "({}, {}) ", p.0.x, p.0.y)?;
-        }
-        write!(f, ">")
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct PointKey(Point);
-
-impl PartialEq for PointKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.x.eq(&other.0.x) && self.0.y.eq(&other.0.y)
-    }
-}
-
-impl Eq for PointKey {}
-
-impl PartialOrd for PointKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.0.x.partial_cmp(&other.0.x) {
-            None | Some(Ordering::Equal) => self.0.y.partial_cmp(&other.0.y),
-            x_order => {
-                return x_order;
-            }
-        }
-    }
-}
-
-impl Ord for PointKey {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
-    }
-}
-
-impl From<Point> for PointKey {
-    fn from(value: Point) -> Self {
-        Self(value)
-    }
-}
-
-impl PointKey {
-    /// clone the point
-    fn point(&self) -> Point {
-        self.0
-    }
-}
-
-#[derive(Debug)]
-pub struct Node {
-    pub point_id: PointId,
-    pub triangle: TriangleId,
-}
-
 impl AdvancingFront {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
@@ -137,13 +80,7 @@ impl AdvancingFront {
 
 impl AdvancingFront {
     /// locate the node containing point
-    pub fn locate_point_mut(&mut self, point: Point) -> Option<&mut Node> {
-        let key = PointKey(point);
-        self.nodes.get_mut(&key)
-    }
-}
-
-impl AdvancingFront {
+    /// locate the node for `x`
     pub fn locate_node(&self, x: f64) -> Option<(Point, &Node)> {
         let key = PointKey(Point::new(x, f64::MAX));
         let mut iter = self.nodes.range(..&key).rev();
@@ -151,13 +88,18 @@ impl AdvancingFront {
         Some((node.0.point(), node.1))
     }
 
-    /// get the node identified by `point`
+    /// Get the node identified by `point`
     pub fn get_node(&self, point: Point) -> Option<&Node> {
         self.nodes.get(&PointKey(point))
     }
 
+    /// Get a mut reference to the node identified by `point`
+    pub fn get_node_mut(&mut self, point: Point) -> Option<&mut Node> {
+        self.nodes.get_mut(&PointKey(point))
+    }
+
     /// Get next node of the node identified by `point`
-    /// Note: even if the node is deleted, then this returns next node
+    /// Note: even if the node is deleted, this also returns next node as if it is not deleted
     pub fn next_node(&self, point: Point) -> Option<(Point, &Node)> {
         let key = PointKey(point);
         self.nodes
@@ -168,7 +110,7 @@ impl AdvancingFront {
     }
 
     /// Get prev node of the node identified by `point`
-    /// Note: even if the node is deleted, then this returns prev node
+    /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
     pub fn prev_node(&self, point: Point) -> Option<(Point, &Node)> {
         self.nodes
             .range(..PointKey(point))
@@ -176,6 +118,54 @@ impl AdvancingFront {
             .nth(0)
             .map(|(p, v)| (p.point(), v))
     }
+}
+
+/// New type to wrap `Point` as Node's key
+#[derive(Debug, Clone, Copy)]
+struct PointKey(Point);
+
+impl PartialEq for PointKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.x.eq(&other.0.x) && self.0.y.eq(&other.0.y)
+    }
+}
+
+impl Eq for PointKey {}
+
+impl PartialOrd for PointKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.0.x.partial_cmp(&other.0.x) {
+            None | Some(Ordering::Equal) => self.0.y.partial_cmp(&other.0.y),
+            x_order => {
+                return x_order;
+            }
+        }
+    }
+}
+
+impl Ord for PointKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
+}
+
+impl From<Point> for PointKey {
+    fn from(value: Point) -> Self {
+        Self(value)
+    }
+}
+
+impl PointKey {
+    /// clone the point
+    fn point(&self) -> Point {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct Node {
+    pub point_id: PointId,
+    pub triangle: TriangleId,
 }
 
 #[cfg(test)]

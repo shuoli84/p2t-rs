@@ -20,6 +20,28 @@ use crate::utils::in_scan_area;
 pub use points::PointId;
 pub use shape::Point;
 
+/// Sweeper Builder
+///
+/// # Example
+/// ```rust
+/// use
+///
+///    let mut builder = SweeperBuilder::new(vec![
+///        Point::new(-10., -10.),
+///        Point::new(810., -10.),
+///        Point::new(810., 810.),
+///        Point::new(-10., 810.),
+///    ]);
+///    builder.add_points(p);
+///    builder.add_hole(vec![
+///        Point::new(400., 400.),
+///        Point::new(600., 400.),
+///        Point::new(600., 600.),
+///        Point::new(400., 600.),
+///    ]);
+///    let sweeper = builder.build();
+/// ```
+
 pub struct SweeperBuilder {
     edges_builder: EdgesBuilder,
     points: Points,
@@ -37,12 +59,22 @@ impl SweeperBuilder {
         }
     }
 
-    pub fn add_point(&mut self, point: Point) -> &mut Self {
+    /// Add a single sparse `Point`, there is no edge attached to it
+    /// NOTE: if the point locates outside of polyline, then it has no
+    /// effect on the final result
+    pub fn add_point(mut self, point: Point) -> Self {
         self.points.add_point(point);
         self
     }
 
-    pub fn add_hole(&mut self, polyline: Vec<Point>) -> &mut Self {
+    /// Add multiple [`Point`], batch version for `Self::add_point`
+    pub fn add_points(mut self, points: impl IntoIterator<Item = Point>) -> Self {
+        let _ = self.points.add_points(points);
+        self
+    }
+
+    /// Add a hole defined by polyline.
+    pub fn add_hole(mut self, polyline: Vec<Point>) -> Self {
         let edges = parse_polyline(polyline, &mut self.points);
         self.edges_builder.add_edges(edges);
         self
@@ -409,7 +441,7 @@ impl Sweeper {
                     .points
                     .get_point(triangle.point_cw(triangle.points[i]))
                     .expect("should exist");
-                if let Some(node) = context.advancing_front.locate_point_mut(point) {
+                if let Some(node) = context.advancing_front.get_node_mut(point) {
                     node.triangle = triangle_id;
                 }
             }
@@ -1328,24 +1360,22 @@ mod tests {
             points
         };
 
-        let mut builder = SweeperBuilder::new(vec![
+        let mut sweeper = SweeperBuilder::new(vec![
             Point::new(-10., -10.),
             Point::new(810., -10.),
             Point::new(810., 810.),
             Point::new(-10., 810.),
-        ]);
-        for p in points {
-            builder.add_point(p);
-        }
-
-        builder.add_hole(vec![
+        ])
+        .add_points(points)
+        .add_hole(vec![
             Point::new(400., 400.),
             Point::new(600., 400.),
             Point::new(600., 600.),
             Point::new(400., 600.),
-        ]);
+        ])
+        .build();
 
-        builder.build().triangulate();
+        sweeper.triangulate();
 
         delete_file(file_path);
     }
