@@ -18,7 +18,7 @@ impl std::fmt::Debug for AdvancingFront {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct PointKey(Point);
 
 impl PartialEq for PointKey {
@@ -158,10 +158,12 @@ impl AdvancingFront {
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns next node
     pub fn next_node(&self, point: Point) -> Option<(Point, &Node)> {
+        let key = PointKey(point);
         self.nodes
-            .range(PointKey(point)..)
-            .nth(1)
+            .range(key..)
+            .skip_while(|(p, _)| **p == key)
             .map(|(p, v)| (p.point(), v))
+            .next()
     }
 
     /// Get prev node of the node identified by `point`
