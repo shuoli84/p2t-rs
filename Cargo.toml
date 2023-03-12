@@ -7,15 +7,15 @@ edition = "2021"
 
 [dependencies]
 rustc-hash = "1.1"
-imageproc = { version = "0.23", optional = true }
-image = { version = "0.24", optional = true }
-rusttype = { version = "0.9", optional = true }
 thiserror = "1.0"
 
 [dev-dependencies]
 rand = "0.8"
 criterion = { version = "0.4", features = ["html_reports"] }
 clap = { version = "4.1.8", features = ["derive"] }
+imageproc = { version = "0.23" }
+image = { version = "0.24" }
+rusttype = { version = "0.9" }
 
 [[bench]]
 name = "bench"
@@ -23,7 +23,3 @@ harness = false
 
 [features]
 default = []
-draw_base = ["imageproc", "image", "rusttype"]
-draw = ["draw_base"]
-draw_detail = ["draw_base"]
-draw_result = ["draw_base"]

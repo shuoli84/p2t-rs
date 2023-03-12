@@ -8,7 +8,6 @@ mod triangles;
 mod utils;
 
 use advancing_front::AdvancingFront;
-use context::Context;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
 use rustc_hash::FxHashSet;
@@ -18,8 +17,23 @@ use utils::{in_circle, orient_2d, Orientation};
 
 use crate::utils::in_scan_area;
 
+/// exported to enable observer
+pub use context::Context;
 pub use points::PointId;
-pub use shape::Point;
+pub use shape::{Edge, Point};
+
+#[allow(unused_variables)]
+pub trait Observer {
+    fn point_event(&mut self, point_id: PointId, context: &Context) {}
+
+    fn edge_event(&mut self, edge: Edge, context: &Context) {}
+
+    fn sweep_done(&mut self, context: &Context) {}
+
+    fn finalized(&mut self, context: &Context) {}
+}
+
+impl Observer for () {}
 
 /// Sweeper Builder
 ///
@@ -145,8 +159,12 @@ pub struct Trianglulate {
 }
 
 impl Sweeper {
-    /// Run triangulate. This is the entry method for cdt triangulation
     pub fn triangulate(self) -> Trianglulate {
+        self.triangulate_with_observer(())
+    }
+
+    /// Run triangulate. This is the entry method for cdt triangulation
+    pub fn triangulate_with_observer(self, mut observer: impl Observer) -> Trianglulate {
         let mut triangles = Triangles::new();
 
         let initial_triangle = triangles.insert(Triangle::new(
@@ -169,15 +187,11 @@ impl Sweeper {
             &mut advancing_front,
         );
 
-        Self::sweep_points(&mut context);
-
-        #[cfg(feature = "draw_detail")]
-        {
-            context.messages.push("sweep done".into());
-            context.draw();
-        }
+        Self::sweep_points(&mut context, &mut observer);
+        observer.sweep_done(&context);
 
         Self::finalize_polygon(&mut context);
+        observer.finalized(&context);
         #[cfg(feature = "draw_result")]
         {
             context.draw();
@@ -194,34 +208,16 @@ impl Sweeper {
         }
     }
 
-    fn sweep_points(context: &mut Context) {
+    fn sweep_points(context: &mut Context, observer: &mut impl Observer) {
         for (point_id, point) in context.points.iter_point_by_y(1) {
             Self::point_event(point_id, point, context);
-
-            #[cfg(feature = "draw_detail")]
-            {
-                context
-                    .messages
-                    .push(format!("point event: {point_id:?} {point:?}"));
-
-                context.draw();
-            }
+            observer.point_event(point_id, context);
 
             for p in context.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
                 Self::edge_event(edge, point, context);
 
-                #[cfg(feature = "draw_detail")]
-                {
-                    context.messages.push(format!(
-                        "edge_event: p:{} q:{} node:{:?}",
-                        edge.p.as_usize(),
-                        edge.q.as_usize(),
-                        point
-                    ));
-
-                    context.draw();
-                }
+                observer.edge_event(edge, context);
             }
 
             debug_assert!(Self::verify_triangles(context));
@@ -360,8 +356,6 @@ impl Sweeper {
 
         while let Some(triangle_id) = task_queue.pop() {
             let mut f = || {
-                context.count_legalize_incr();
-
                 for point_idx in 0..3 {
                     let triangle = context.triangles.get_unchecked(triangle_id);
 
