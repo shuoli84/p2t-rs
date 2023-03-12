@@ -165,16 +165,15 @@ impl Sweeper {
 
         Self::sweep_points(&mut context);
 
-        #[cfg(feature = "draw")]
+        #[cfg(feature = "draw_detail")]
         {
             context.messages.push("sweep done".into());
             context.draw();
         }
 
         Self::finalize_polygon(&mut context);
-        #[cfg(feature = "draw")]
+        #[cfg(feature = "draw_result")]
         {
-            context.messages.push("finalize polygon".into());
             context.draw();
         }
 
@@ -193,7 +192,7 @@ impl Sweeper {
         for (point_id, point) in context.points.iter_point_by_y(1) {
             Self::point_event(point_id, point, context);
 
-            #[cfg(feature = "draw")]
+            #[cfg(feature = "draw_detail")]
             {
                 context
                     .messages
@@ -206,7 +205,7 @@ impl Sweeper {
                 let edge = Edge { p: *p, q: point_id };
                 Self::edge_event(edge, point, context);
 
-                #[cfg(feature = "draw")]
+                #[cfg(feature = "draw_detail")]
                 {
                     context.messages.push(format!(
                         "edge_event: p:{} q:{} node:{:?}",
@@ -273,7 +272,7 @@ impl Sweeper {
                 }
             }
 
-            #[cfg(feature = "detail_draw")]
+            #[cfg(feature = "draw_detail")]
             context.draw();
         }
 
@@ -642,10 +641,6 @@ impl Sweeper {
             let triangle = node.triangle.unwrap();
             if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
                 // the edge is already an edge of the triangle, return
-                #[cfg(feature = "draw")]
-                context
-                    .messages
-                    .push("the edge is already an edge of the triangle, return".to_string());
                 return;
             }
 
@@ -720,13 +715,6 @@ impl Sweeper {
         mut node_point: Point,
         context: &mut Context,
     ) {
-        #[cfg(feature = "draw")]
-        context.messages.push(format!(
-            "fill_right_above_edge_event: p:{} q:{}",
-            edge.p_id().as_usize(),
-            edge.q_id().as_usize(),
-        ));
-
         while let Some((next_node_point, _)) = context.advancing_front.next_node(node_point) {
             if next_node_point.x >= edge.p.x {
                 break;

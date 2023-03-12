@@ -21,5 +21,7 @@ harness = false
 
 [features]
 default = []
-draw = ["imageproc", "image", "rusttype"]
-detail_draw = ["imageproc", "image", "rusttype"]
+draw_base = ["imageproc", "image", "rusttype"]
+draw = ["draw_base"]
+draw_detail = ["draw_base"]
+draw_result = ["draw_base"]
