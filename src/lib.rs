@@ -347,7 +347,7 @@ impl Sweeper {
         let mut legalized_triangles = FxHashSet::default();
 
         // record the task and who triggered it
-        let mut task_queue = Vec::<TriangleId>::new();
+        let mut task_queue = std::mem::take(&mut context.legalize_task_queue);
         task_queue.push(triangle_id);
         legalized_triangles.insert(triangle_id);
 
@@ -408,6 +408,12 @@ impl Sweeper {
 
         for triangle_id in legalized_triangles {
             Self::map_triangle_to_nodes(triangle_id, context);
+        }
+
+        {
+            // give back the task queue
+            task_queue.clear();
+            context.legalize_task_queue = task_queue;
         }
     }
 
