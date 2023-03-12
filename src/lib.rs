@@ -420,8 +420,8 @@ impl Sweeper {
         op: PointId,
         triangles: &mut Triangles,
     ) {
-        let t = triangles.get(triangle_id).unwrap();
-        let ot = triangles.get(ot_id).unwrap();
+        let t = triangles.get_unchecked(triangle_id);
+        let ot = triangles.get_unchecked(ot_id);
 
         let n1 = t.neighbor_ccw(p);
         let n2 = t.neighbor_cw(p);
@@ -467,10 +467,11 @@ impl Sweeper {
         let triangle = triangle_id.get(&context.triangles);
         for i in 0..3 {
             if triangle.neighbors[i].invalid() {
-                let point = context
-                    .points
-                    .get_point(triangle.point_cw(triangle.points[i]))
-                    .expect("should exist");
+                let point = unsafe {
+                    context
+                        .points
+                        .get_point_uncheck(triangle.point_cw(triangle.points[i]))
+                };
                 if let Some(node) = context.advancing_front.get_node_mut(point) {
                     node.triangle = Some(triangle_id);
                 }
