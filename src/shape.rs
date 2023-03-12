@@ -56,17 +56,21 @@ impl Point {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Triangle {
-    /// flags to determine if an edge is a Constrained edge
-    pub constrained_edge: [bool; 3],
-
     /// triangle points
     pub points: [PointId; 3],
 
-    /// Has this triangle been marked as an interior triangle?
-    pub interior: bool,
-
     /// neighbors
     pub neighbors: [TriangleId; 3],
+
+    /// flags to determine if an edge is a Constrained edge
+    pub constrained_edge: [bool; 3],
+
+    /// whether the triangle is queued for legalize
+    ///  used to prevent redundant work in legalize.
+    pub queued: bool,
+
+    /// Has this triangle been marked as an interior triangle?
+    pub interior: bool,
 }
 
 impl Triangle {
@@ -76,6 +80,7 @@ impl Triangle {
             constrained_edge: [false, false, false],
             interior: false,
             neighbors: [TriangleId::INVALID; 3],
+            queued: false,
         }
     }
 

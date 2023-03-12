@@ -7,8 +7,10 @@ pub struct Context<'a> {
     pub advancing_front: &'a mut AdvancingFront,
     pub result: Vec<TriangleId>,
 
-    // reuse legalize task queue to reduce alloc overhead
+    // reusable legalize task queue to reduce alloc overhead
     pub(crate) legalize_task_queue: Vec<TriangleId>,
+    // reusable legalize remap triangle ids to reduce alloc overhead
+    pub(crate) legalize_remap_tids: Vec<TriangleId>,
 }
 
 impl<'a> Context<'a> {
@@ -26,6 +28,7 @@ impl<'a> Context<'a> {
             result: Default::default(),
 
             legalize_task_queue: Default::default(),
+            legalize_remap_tids: Default::default(),
         }
     }
 }

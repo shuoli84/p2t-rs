@@ -10,7 +10,6 @@ mod utils;
 use advancing_front::AdvancingFront;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
-use rustc_hash::FxHashSet;
 use shape::*;
 use triangles::{TriangleId, Triangles};
 use utils::{in_circle, orient_2d, Orientation};
@@ -344,22 +343,23 @@ impl Sweeper {
     fn legalize(triangle_id: TriangleId, context: &mut Context) {
         // keeps record of all touched triangles, after legalize finished
         // need to remap all to the advancing front
-        let mut legalized_triangles = FxHashSet::default();
+        let mut legalized_triangles = std::mem::take(&mut context.legalize_remap_tids);
 
         // record the task and who triggered it
         let mut task_queue = std::mem::take(&mut context.legalize_task_queue);
         task_queue.push(triangle_id);
-        legalized_triangles.insert(triangle_id);
+        legalized_triangles.push(triangle_id);
 
         while let Some(triangle_id) = task_queue.pop() {
             let mut f = || {
                 for point_idx in 0..3 {
-                    let triangle = context.triangles.get_unchecked(triangle_id);
+                    let triangle = triangle_id.get(&context.triangles);
 
                     let opposite_triangle_id = triangle.neighbors[point_idx];
-                    let Some(opposite_triangle) = context.triangles.get(opposite_triangle_id) else {
+                    if opposite_triangle_id.invalid() {
                         continue;
                     };
+                    let opposite_triangle = opposite_triangle_id.get(&context.triangles);
 
                     let p = triangle.points[point_idx];
                     let op = opposite_triangle.opposite_point(&triangle, p);
@@ -395,9 +395,9 @@ impl Sweeper {
                         );
 
                         task_queue.push(triangle_id);
-                        legalized_triangles.insert(triangle_id);
                         task_queue.push(opposite_triangle_id);
-                        legalized_triangles.insert(opposite_triangle_id);
+                        legalized_triangles.push(triangle_id);
+                        legalized_triangles.push(opposite_triangle_id);
 
                         return;
                     }
@@ -406,14 +406,14 @@ impl Sweeper {
             f();
         }
 
-        for triangle_id in legalized_triangles {
+        for triangle_id in legalized_triangles.drain(..) {
             Self::map_triangle_to_nodes(triangle_id, context);
         }
 
         {
             // give back the task queue
-            task_queue.clear();
             context.legalize_task_queue = task_queue;
+            context.legalize_remap_tids = legalized_triangles;
         }
     }
 
@@ -1371,48 +1371,42 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        // attach_debugger();
-        let file_path = "test_data/bird.dat";
+        // let file_path = "test_data/latest_test_data.dat";
 
-        let points = if let Some(points) = try_load_from_file(file_path) {
-            points
-                .into_iter()
-                .map(|p| Point {
-                    x: p.x * 100.,
-                    y: p.y * 100.,
-                })
-                .collect::<Vec<_>>()
-        } else {
-            panic!();
-            let mut points = Vec::<Point>::new();
-            for _ in 0..100 {
-                let x: f64 = rand::thread_rng().gen_range(0.0..800.);
-                let y: f64 = rand::thread_rng().gen_range(0.0..800.);
-                points.push(Point::new(x, y));
-            }
-            save_to_file(&points, file_path);
-            points
-        };
+        // let points = if let Some(points) = try_load_from_file(file_path) {
+        //     points
+        //         .into_iter()
+        //         .map(|p| Point {
+        //             x: p.x * 100.,
+        //             y: p.y * 100.,
+        //         })
+        //         .collect::<Vec<_>>()
+        // } else {
+        let mut points = Vec::<Point>::new();
+        for _ in 0..100 {
+            let x: f64 = rand::thread_rng().gen_range(0.0..800.);
+            let y: f64 = rand::thread_rng().gen_range(0.0..800.);
+            points.push(Point::new(x, y));
+        }
+        // save_to_file(&points, file_path);
+        //     points
+        // };
 
-        let mut sweeper = SweeperBuilder::new(points).build();
+        let mut sweeper = SweeperBuilder::new(vec![
+            Point::new(-10., -10.),
+            Point::new(810., -10.),
+            Point::new(810., 810.),
+            Point::new(-10., 810.),
+        ])
+        .add_steiner_points(points)
+        .add_hole(vec![
+            Point::new(400., 400.),
+            Point::new(600., 400.),
+            Point::new(600., 600.),
+            Point::new(400., 600.),
+        ])
+        .build();
         sweeper.triangulate();
-
-        // let mut sweeper = SweeperBuilder::new(vec![
-        //     Point::new(-10., -10.),
-        //     Point::new(810., -10.),
-        //     Point::new(810., 810.),
-        //     Point::new(-10., 810.),
-        // ])
-        // .add_points(points)
-        // .add_hole(vec![
-        //     Point::new(400., 400.),
-        //     Point::new(600., 400.),
-        //     Point::new(600., 600.),
-        //     Point::new(400., 600.),
-        // ])
-        // .build();
-        // sweeper.triangulate();
-
         // delete_file(file_path);
     }
 
