@@ -41,6 +41,12 @@ impl Triangles {
     pub fn insert(&mut self, triangle: Triangle) -> TriangleId {
         let id = TriangleId(self.triangles.len());
         self.triangles.push(triangle);
+        if triangle
+            .edge_index(crate::PointId(3), crate::PointId(4))
+            .is_some()
+        {
+            print!("break here");
+        }
         id
     }
 

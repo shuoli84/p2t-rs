@@ -1,27 +1,6 @@
 use crate::{Edge, PointId};
 
 /// Builder for `Edges`
-///
-/// # Example
-/// use
-///
-///    let mut builder = SweeperBuilder::new(vec![
-///        Point::new(-10., -10.),
-///        Point::new(810., -10.),
-///        Point::new(810., 810.),
-///        Point::new(-10., 810.),
-///    ]);
-///    for p in points {
-///        builder.add_point(p);
-///    }
-///    builder.add_hole(vec![
-///        Point::new(400., 400.),
-///        Point::new(600., 400.),
-///        Point::new(600., 600.),
-///        Point::new(400., 600.),
-///    ]);
-///    let _edges = builder.build();
-
 pub struct EdgesBuilder {
     edges_list: Vec<Vec<Edge>>,
 }

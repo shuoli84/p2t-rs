@@ -84,7 +84,6 @@ impl SweeperBuilder {
         Sweeper {
             points: self.points,
             edges: self.edges_builder.build(),
-            triangles: Triangles::new(),
         }
     }
 }
@@ -93,44 +92,58 @@ fn parse_polyline(polyline: Vec<Point>, points: &mut Points) -> Vec<Edge> {
     let mut edge_list = Vec::with_capacity(polyline.len());
 
     let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
-    let first_point = point_iter.next().expect("empty polyline");
-
-    let mut last_point = first_point;
-    loop {
-        match point_iter.next() {
-            Some(p2) => {
-                let edge = Edge::new(last_point, p2);
-                edge_list.push(edge);
-                last_point = p2;
-            }
-            None => {
-                let edge = Edge::new(last_point, first_point);
-                edge_list.push(edge);
-                break;
+    if let Some(first_point) = point_iter.next() {
+        let mut last_point = first_point;
+        loop {
+            match point_iter.next() {
+                Some(p2) => {
+                    let edge = Edge::new(last_point, p2);
+                    edge_list.push(edge);
+                    last_point = p2;
+                }
+                None => {
+                    let edge = Edge::new(last_point, first_point);
+                    edge_list.push(edge);
+                    break;
+                }
             }
         }
-    }
 
-    edge_list
+        edge_list
+    } else {
+        vec![]
+    }
 }
 
 #[derive(Debug)]
 pub struct Sweeper {
     points: Points,
     edges: Edges,
+}
+
+/// The result of triangulate
+pub struct Trianglulate {
+    /// points store, it includes all points, including ones in hole
+    points: Points,
+    /// including all edges
+    /// points and edges can be used to recreate, useful in some cases:
+    ///  e.g: bench test. modify edges on same point set etc.
+    edges: Edges,
+    /// including all triangles, including ones in hole
     triangles: Triangles,
+    /// final result `TriangleId`s
+    result: Vec<TriangleId>,
 }
 
 impl Sweeper {
-    pub fn add_point(&mut self, point: Point) -> PointId {
-        self.points.add_point(point)
-    }
-
-    pub fn triangulate(&mut self) {
+    /// Run triangulate. This is the entry method for cdt triangulation
+    pub fn triangulate(mut self) -> Trianglulate {
         // sort all points first
         self.points = std::mem::take(&mut self.points).into_sorted();
 
-        let initial_triangle = self.triangles.insert(Triangle::new(
+        let mut triangles = Triangles::new();
+
+        let initial_triangle = triangles.insert(Triangle::new(
             self.points.get_id_by_y(0).unwrap(),
             Points::HEAD_ID,
             Points::TAIL_ID,
@@ -138,7 +151,7 @@ impl Sweeper {
 
         // create the advancing front with initial triangle
         let mut advancing_front = AdvancingFront::new(
-            self.triangles.get(initial_triangle).unwrap(),
+            triangles.get(initial_triangle).unwrap(),
             initial_triangle,
             &self.points,
         );
@@ -146,7 +159,7 @@ impl Sweeper {
         let mut context = Context::new(
             &self.points,
             &self.edges,
-            &mut self.triangles,
+            &mut triangles,
             &mut advancing_front,
         );
 
@@ -163,6 +176,16 @@ impl Sweeper {
         {
             context.messages.push("finalize polygon".into());
             context.draw();
+        }
+
+        // take result out of context
+        let result = context.result;
+
+        Trianglulate {
+            points: self.points,
+            edges: self.edges,
+            triangles,
+            result,
         }
     }
 
@@ -189,7 +212,7 @@ impl Sweeper {
                         "edge_event: p:{} q:{} node:{:?}",
                         edge.p.as_usize(),
                         edge.q.as_usize(),
-                        node_point
+                        point
                     ));
 
                     context.draw();
@@ -205,7 +228,7 @@ impl Sweeper {
         // the first node is head, artificial point, so skip
         let (_, node) = context.advancing_front.nth(1)?;
 
-        let mut t = node.triangle;
+        let mut t = node.triangle?;
 
         loop {
             if let Some(tri) = context.triangles.get(t) {
@@ -216,6 +239,7 @@ impl Sweeper {
                 }
             }
         }
+        println!("t {t:?}");
 
         if !t.invalid() {
             Self::clean_mesh(t, context);
@@ -225,26 +249,37 @@ impl Sweeper {
     }
 
     fn clean_mesh(triangle_id: TriangleId, context: &mut Context) -> Option<()> {
-        let mut triangles = Vec::<TriangleId>::new();
-        triangles.push(triangle_id);
+        // id and from, it should not trigger from again
+        let mut triangles = Vec::<(TriangleId, TriangleId)>::new();
+        triangles.push((triangle_id, TriangleId::INVALID));
 
-        while let Some(t) = triangles.pop() {
+        while let Some((t, from)) = triangles.pop() {
             if t.invalid() {
                 continue;
             }
 
             let tri = context.triangles.get_mut(t).unwrap();
 
+            println!("{t:?}: tri: {tri:?}");
+
             if !tri.interior {
                 tri.interior = true;
+                println!("is in");
                 context.result.push(t);
 
                 for i in 0..3 {
                     if !tri.constrained_edge[i] {
-                        triangles.push(tri.neighbors[i]);
+                        let new_t = tri.neighbors[i];
+                        if new_t != from {
+                            println!("{t:?} -> {new_t:?}");
+                            triangles.push((new_t, t));
+                        }
                     }
                 }
             }
+
+            #[cfg(feature = "detail_draw")]
+            context.draw();
         }
 
         Some(())
@@ -264,7 +299,7 @@ impl Sweeper {
             context
                 .triangles
                 .insert(Triangle::new(point_id, node.point_id, next_node.point_id));
-        let node_triangle = node.triangle;
+        let node_triangle = node.triangle.unwrap();
         context.triangles.mark_neighbor(node_triangle, triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
@@ -339,8 +374,8 @@ impl Sweeper {
                     let op = opposite_triangle.opposite_point(&triangle, p);
                     let oi = opposite_triangle.point_index(op).unwrap();
 
-                    // if this is a constrained edge or a delaunay edge(only during recursive legalization)
-                    // then we should not try to legalize
+                    // if this is a constrained edge then we should not try to legalize
+                    // todo: we should not set constrained here. but in create triangle
                     if opposite_triangle.constrained_edge[oi] {
                         context.triangles.set_constrained(
                             triangle_id,
@@ -442,7 +477,7 @@ impl Sweeper {
                     .get_point(triangle.point_cw(triangle.points[i]))
                     .expect("should exist");
                 if let Some(node) = context.advancing_front.get_node_mut(point) {
-                    node.triangle = triangle_id;
+                    node.triangle = Some(triangle_id);
                 }
             }
         }
@@ -463,10 +498,12 @@ impl Sweeper {
             next_node.1.point_id,
         ));
 
-        context
-            .triangles
-            .mark_neighbor(triangle_id, prev_node.1.triangle);
-        context.triangles.mark_neighbor(triangle_id, node.triangle);
+        if let Some(prev_tri) = prev_node.1.triangle {
+            context.triangles.mark_neighbor(triangle_id, prev_tri);
+        }
+        if let Some(node_tri) = node.triangle {
+            context.triangles.mark_neighbor(triangle_id, node_tri);
+        }
 
         // update prev_node's triangle to newly created
         context
@@ -477,7 +514,7 @@ impl Sweeper {
 
         // this node maybe shadowed by new triangle, delete it from advancing front
         let node = context.advancing_front.get_node(node_point).unwrap();
-        let tri = context.triangles.get_unchecked(node.triangle);
+        let tri = context.triangles.get_unchecked(node.triangle.unwrap());
         if tri.point_index(node.point_id).is_none() || !tri.neighbor_cw(node.point_id).invalid() {
             // todo: we need to ensure all frontint node's triangle is updated. which means
             //     even for node needs to delete
@@ -607,7 +644,7 @@ impl Sweeper {
             // check and fill
             let node = context.advancing_front.get_node(node_point).unwrap();
 
-            let triangle = node.triangle;
+            let triangle = node.triangle.unwrap();
             if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
                 // the edge is already an edge of the triangle, return
                 context
@@ -625,7 +662,8 @@ impl Sweeper {
             .advancing_front
             .get_node(node_point)
             .unwrap()
-            .triangle;
+            .triangle
+            .unwrap();
 
         // this triangle crosses constraint so let's flippin start!
         let mut triangle_ids = Vec::<TriangleId>::new();
@@ -698,7 +736,7 @@ impl Sweeper {
             }
 
             // check if next node is below the edge
-            if orient_2d(edge.p, next_node_point, edge.q).is_ccw() {
+            if orient_2d(edge.q, next_node_point, edge.p).is_ccw() {
                 Self::fill_right_below_edge_event(edge, node_point, context);
             } else {
                 // try next node
@@ -1031,6 +1069,9 @@ impl Sweeper {
 
             if p == eq && op == ep {
                 if eq == edge.q_id() && ep == edge.p_id() {
+                    if (ep.0 == 3 || eq.0 == 3) && (ep.0 == 4 || eq.0 == 4) {
+                        println!("break here");
+                    }
                     context
                         .triangles
                         .get_mut_unchecked(triangle_id)
@@ -1344,12 +1385,19 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        // attach_debugger();
-        let file_path = "test_data/lastest_test_data";
+        attach_debugger();
+        let file_path = "test_data/bird.dat";
 
         let points = if let Some(points) = try_load_from_file(file_path) {
             points
+                .into_iter()
+                .map(|p| Point {
+                    x: p.x * 100.,
+                    y: p.y * 100.,
+                })
+                .collect::<Vec<_>>()
         } else {
+            panic!();
             let mut points = Vec::<Point>::new();
             for _ in 0..100 {
                 let x: f64 = rand::thread_rng().gen_range(0.0..800.);
@@ -1360,24 +1408,26 @@ mod tests {
             points
         };
 
-        let mut sweeper = SweeperBuilder::new(vec![
-            Point::new(-10., -10.),
-            Point::new(810., -10.),
-            Point::new(810., 810.),
-            Point::new(-10., 810.),
-        ])
-        .add_points(points)
-        .add_hole(vec![
-            Point::new(400., 400.),
-            Point::new(600., 400.),
-            Point::new(600., 600.),
-            Point::new(400., 600.),
-        ])
-        .build();
-
+        let mut sweeper = SweeperBuilder::new(points).build();
         sweeper.triangulate();
 
-        delete_file(file_path);
+        // let mut sweeper = SweeperBuilder::new(vec![
+        //     Point::new(-10., -10.),
+        //     Point::new(810., -10.),
+        //     Point::new(810., 810.),
+        //     Point::new(-10., 810.),
+        // ])
+        // .add_points(points)
+        // .add_hole(vec![
+        //     Point::new(400., 400.),
+        //     Point::new(600., 400.),
+        //     Point::new(600., 600.),
+        //     Point::new(400., 600.),
+        // ])
+        // .build();
+        // sweeper.triangulate();
+
+        // delete_file(file_path);
     }
 
     fn try_load_from_file(path: &str) -> Option<Vec<Point>> {
@@ -1417,5 +1467,18 @@ mod tests {
 
     fn delete_file(path: &str) {
         std::fs::remove_file(path).unwrap();
+    }
+
+    fn attach_debugger() {
+        let url = format!(
+            "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','pid':{}}}",
+            std::process::id()
+        );
+        std::process::Command::new("code")
+            .arg("--open-url")
+            .arg(url)
+            .output()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1)); // Wait for debugger to attach
     }
 }
