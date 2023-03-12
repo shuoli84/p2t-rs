@@ -32,7 +32,7 @@ pub use shape::Point;
 ///        Point::new(810., -10.),
 ///        Point::new(810., 810.),
 ///        Point::new(-10., 810.),
-///    ]).add_points(vec![
+///    ]).add_steiner_points(vec![
 ///        Point::new(50., 50.),
 ///    ]).add_hole(vec![
 ///        Point::new(400., 400.),
@@ -63,13 +63,13 @@ impl SweeperBuilder {
     /// Add a single sparse `Point`, there is no edge attached to it
     /// NOTE: if the point locates outside of polyline, then it has no
     /// effect on the final result
-    pub fn add_point(mut self, point: Point) -> Self {
+    pub fn add_steiner_point(mut self, point: Point) -> Self {
         self.points.add_point(point);
         self
     }
 
     /// Add multiple [`Point`], batch version for `Self::add_point`
-    pub fn add_points(mut self, points: impl IntoIterator<Item = Point>) -> Self {
+    pub fn add_steiner_points(mut self, points: impl IntoIterator<Item = Point>) -> Self {
         let _ = self.points.add_points(points);
         self
     }

@@ -11,7 +11,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 Point::new(810., 810.),
                 Point::new(-10., 810.),
             ])
-            .add_points(points.clone())
+            .add_steiner_points(points.clone())
             .add_hole(vec![
                 Point::new(400., 400.),
                 Point::new(600., 400.),

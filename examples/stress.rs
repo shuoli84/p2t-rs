@@ -37,7 +37,7 @@ fn test_rand() {
         Point::new(810., 810.),
         Point::new(-10., 810.),
     ])
-    .add_points(points)
+    .add_steiner_points(points)
     .add_hole(vec![
         Point::new(400., 400.),
         Point::new(600., 400.),

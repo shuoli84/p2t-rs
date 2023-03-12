@@ -63,7 +63,7 @@ impl Loader for PlainFileLoader {
 
         Ok(SweeperBuilder::new(polygon)
             .add_holes(holes)
-            .add_points(steiner_points)
+            .add_steiner_points(steiner_points)
             .build())
     }
 }
