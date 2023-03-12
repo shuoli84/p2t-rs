@@ -28,21 +28,21 @@ impl AdvancingFront {
             first_point.into(),
             Node {
                 point_id: triangle.points[1],
-                triangle: triangle_id,
+                triangle: Some(triangle_id),
             },
         );
         nodes.insert(
             middle_point.into(),
             Node {
                 point_id: triangle.points[0],
-                triangle: triangle_id,
+                triangle: Some(triangle_id),
             },
         );
         nodes.insert(
             tail_node.into(),
             Node {
                 point_id: triangle.points[2],
-                triangle: TriangleId::INVALID,
+                triangle: None,
             },
         );
 
@@ -57,7 +57,7 @@ impl AdvancingFront {
             point.into(),
             Node {
                 point_id,
-                triangle: triangle_id,
+                triangle: Some(triangle_id),
             },
         );
     }
@@ -72,7 +72,6 @@ impl AdvancingFront {
         self.nodes.iter().nth(n).map(|(k, v)| (k.point(), v))
     }
 
-    #[cfg(feature = "draw")]
     pub fn iter(&self) -> impl Iterator<Item = (Point, &Node)> {
         self.nodes.iter().map(|(p, n)| (p.point(), n))
     }
@@ -165,7 +164,8 @@ impl PointKey {
 #[derive(Debug)]
 pub struct Node {
     pub point_id: PointId,
-    pub triangle: TriangleId,
+    /// last node's triangle is None
+    pub triangle: Option<TriangleId>,
 }
 
 #[cfg(test)]

@@ -78,22 +78,46 @@ impl Triangles {
         let left_triangle = self.get(left).unwrap().clone();
         let right_triangle = self.get(right).unwrap().clone();
 
-        if right_triangle.contains_pair((left_triangle.points[1], left_triangle.points[2])) {
-            self.get_mut_unchecked(left).neighbors[0] = right;
+        let l_ei = if right_triangle
+            .contains_pair((left_triangle.points[1], left_triangle.points[2]))
+        {
+            0
         } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[2])) {
-            self.get_mut_unchecked(left).neighbors[1] = right;
+            1
         } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[1])) {
-            self.get_mut_unchecked(left).neighbors[2] = right;
-        }
+            2
+        } else {
+            debug_assert!(false, "they are not neighbors");
+            return;
+        };
 
-        if left_triangle.contains_pair((right_triangle.points[1], right_triangle.points[2])) {
-            self.get_mut_unchecked(right).neighbors[0] = left;
+        let r_ei = if left_triangle
+            .contains_pair((right_triangle.points[1], right_triangle.points[2]))
+        {
+            0
         } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[2]))
         {
-            self.get_mut_unchecked(right).neighbors[1] = left;
+            1
         } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[1]))
         {
-            self.get_mut_unchecked(right).neighbors[2] = left;
+            2
+        } else {
+            debug_assert!(false, "they are not neighbors");
+            return;
+        };
+
+        let is_constrained_edge =
+            left_triangle.constrained_edge[l_ei] || right_triangle.constrained_edge[r_ei];
+        {
+            let left = self.get_mut_unchecked(left);
+            left.neighbors[l_ei] = right;
+            left.constrained_edge[l_ei] = is_constrained_edge;
+        }
+
+        {
+            let right = self.get_mut_unchecked(right);
+            right.neighbors[r_ei] = left;
+            right.constrained_edge[r_ei] = is_constrained_edge;
         }
     }
 

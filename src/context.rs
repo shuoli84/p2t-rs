@@ -40,10 +40,11 @@ impl<'a> Context<'a> {
         self.statistic.legalize_count += 1;
     }
 
-    #[cfg(feature = "draw")]
+    #[cfg(any(feature = "draw", feature = "detail_draw"))]
     pub fn draw(&mut self) {
         use image::{Rgb, RgbImage};
         use imageproc::drawing::*;
+        use imageproc::point::Point;
         use imageproc::rect::Rect;
         use rusttype::Font;
         use rusttype::Scale;
@@ -241,13 +242,19 @@ impl<'a> Context<'a> {
             let p1 = self.points.get_point(t.points[1]).unwrap();
             let p2 = self.points.get_point(t.points[2]).unwrap();
 
-            let p0 = map.map_point_f32(p0.x, p0.y);
-            let p1 = map.map_point_f32(p1.x, p1.y);
-            let p2 = map.map_point_f32(p2.x, p2.y);
+            let p0 = map.map_point_i32(p0.x, p0.y);
+            let p1 = map.map_point_i32(p1.x, p1.y);
+            let p2 = map.map_point_i32(p2.x, p2.y);
 
-            draw_line_segment_mut(&mut image, p0, p1, red);
-            draw_line_segment_mut(&mut image, p1, p2, red);
-            draw_line_segment_mut(&mut image, p2, p0, red);
+            draw_polygon_mut(
+                &mut image,
+                &[
+                    Point::new(p0.0, p0.1),
+                    Point::new(p1.0, p1.1),
+                    Point::new(p2.0, p2.1),
+                ],
+                blue,
+            );
         }
 
         let mut y = 40;
