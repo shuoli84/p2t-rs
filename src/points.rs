@@ -17,26 +17,32 @@ impl PointId {
 }
 
 /// Point store
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Points {
     points: Vec<Point>,
     y_sorted: Vec<PointId>,
-    pub head: Point,
-    pub tail: Point,
+    pub head: PointId,
+    pub tail: PointId,
+}
+
+impl Default for Points {
+    fn default() -> Self {
+        Self {
+            points: vec![],
+            y_sorted: vec![],
+            head: PointId(0),
+            tail: PointId(0),
+        }
+    }
 }
 
 impl Points {
-    /// Head point is the head virtual point
-    pub const HEAD_ID: PointId = PointId(usize::MAX);
-    /// Head point is the tail virtual point
-    pub const TAIL_ID: PointId = PointId(usize::MAX - 1);
-
     pub fn new(points: Vec<Point>) -> Self {
         Self {
             points,
             y_sorted: vec![],
-            head: Default::default(),
-            tail: Default::default(),
+            head: PointId(0),
+            tail: PointId(0),
         }
     }
 
@@ -69,13 +75,16 @@ impl Points {
             .into_iter()
             .map(|(idx, _)| idx)
             .collect::<Vec<_>>();
+
+        let mut points = self.points;
+
         let (head, tail) = {
-            let mut xmax = self.points[0].x;
+            let mut xmax = points[0].x;
             let mut xmin = xmax;
-            let mut ymax = self.points[0].y;
+            let mut ymax = points[0].y;
             let mut ymin = ymax;
 
-            for point in self.points.iter() {
+            for point in points.iter() {
                 xmax = xmax.max(point.x);
                 xmin = xmin.min(point.x);
                 ymax = ymax.max(point.y);
@@ -87,11 +96,15 @@ impl Points {
 
             let head = Point::new(xmin - dx, ymin - dy);
             let tail = Point::new(xmax + dx, ymin - dy);
-            (head, tail)
+            let head_id = PointId(points.len());
+            points.push(head);
+            let tail_id = PointId(points.len());
+            points.push(tail);
+            (head_id, tail_id)
         };
 
         Self {
-            points: self.points,
+            points,
             y_sorted: sorted_ids,
             head,
             tail,
@@ -118,24 +131,12 @@ impl Points {
 
     /// get point for id
     pub fn get_point(&self, point_id: PointId) -> Option<Point> {
-        if point_id == Self::HEAD_ID {
-            Some(self.head)
-        } else if point_id == Self::TAIL_ID {
-            Some(self.tail)
-        } else {
-            self.points.get(point_id.0).cloned()
-        }
+        self.points.get(point_id.0).cloned()
     }
 
     /// get point for id
     pub unsafe fn get_point_uncheck(&self, point_id: PointId) -> Point {
-        if point_id == Self::HEAD_ID {
-            self.head
-        } else if point_id == Self::TAIL_ID {
-            self.tail
-        } else {
-            unsafe { self.points.get_unchecked(point_id.0).clone() }
-        }
+        unsafe { self.points.get_unchecked(point_id.0).clone() }
     }
 
     /// get point by y order

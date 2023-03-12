@@ -145,12 +145,7 @@ impl DrawObserver {
         let mut max_x = f64::MIN;
         let mut min_y = f64::MAX;
         let mut max_y = f64::MIN;
-        for p in context
-            .points
-            .iter()
-            .map(|(_, p)| p)
-            .chain(&[context.points.head, context.points.tail])
-        {
+        for p in context.points.iter().map(|(_, p)| p) {
             min_x = min_x.min(p.x);
             max_x = max_x.max(p.x);
             min_y = min_y.min(p.y);

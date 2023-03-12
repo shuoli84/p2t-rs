@@ -168,8 +168,8 @@ impl Sweeper {
 
         let initial_triangle = triangles.insert(Triangle::new(
             self.points.get_id_by_y(0).unwrap(),
-            Points::HEAD_ID,
-            Points::TAIL_ID,
+            self.points.head,
+            self.points.tail,
         ));
 
         // create the advancing front with initial triangle
