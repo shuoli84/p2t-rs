@@ -1370,29 +1370,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rand() {
-        // let file_path = "test_data/latest_test_data.dat";
+    fn test_bird() {
+        let file_path = "test_data/bird.dat";
+        let points = try_load_from_file(file_path).unwrap();
 
-        // let points = if let Some(points) = try_load_from_file(file_path) {
-        //     points
-        //         .into_iter()
-        //         .map(|p| Point {
-        //             x: p.x * 100.,
-        //             y: p.y * 100.,
-        //         })
-        //         .collect::<Vec<_>>()
-        // } else {
+        let sweeper = SweeperBuilder::new(points).build();
+        sweeper.triangulate();
+    }
+
+    #[test]
+    fn test_rand() {
         let mut points = Vec::<Point>::new();
         for _ in 0..100 {
             let x: f64 = rand::thread_rng().gen_range(0.0..800.);
             let y: f64 = rand::thread_rng().gen_range(0.0..800.);
             points.push(Point::new(x, y));
         }
-        // save_to_file(&points, file_path);
-        //     points
-        // };
 
-        let mut sweeper = SweeperBuilder::new(vec![
+        let sweeper = SweeperBuilder::new(vec![
             Point::new(-10., -10.),
             Point::new(810., -10.),
             Point::new(810., 810.),
@@ -1407,7 +1402,6 @@ mod tests {
         ])
         .build();
         sweeper.triangulate();
-        // delete_file(file_path);
     }
 
     fn try_load_from_file(path: &str) -> Option<Vec<Point>> {
