@@ -120,10 +120,6 @@ impl Triangles {
             right.constrained_edge[r_ei] = is_constrained_edge;
         }
     }
-
-    pub fn set_constrained(&mut self, id: TriangleId, index: usize, val: bool) {
-        self.get_mut_unchecked(id).constrained_edge[index] = val;
-    }
 }
 
 #[cfg(test)]

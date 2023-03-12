@@ -391,6 +391,7 @@ impl Sweeper {
 
                         task_queue.push(triangle_id);
                         task_queue.push(opposite_triangle_id);
+
                         legalized_triangles.push(triangle_id);
                         legalized_triangles.push(opposite_triangle_id);
 
@@ -463,7 +464,7 @@ impl Sweeper {
 
     /// update advancing front node's triangle
     fn map_triangle_to_nodes(triangle_id: TriangleId, context: &mut Context) {
-        let triangle = context.triangles.get(triangle_id).unwrap();
+        let triangle = triangle_id.get(&context.triangles);
         for i in 0..3 {
             if triangle.neighbors[i].invalid() {
                 let point = context
