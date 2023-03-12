@@ -1,14 +1,14 @@
-use std::{cmp::Ordering, collections::BTreeMap};
-
+use super::*;
 use crate::{points::Points, shape::Point, triangles::TriangleId, PointId, Triangle};
+use std::collections::BTreeMap;
 
 /// Advancing front, stores all advancing edges in a btree, this makes store compact
 /// and easier to update
-pub struct AdvancingFront {
+pub struct AdvancingFrontBTree {
     nodes: BTreeMap<PointKey, Node>,
 }
 
-impl AdvancingFront {
+impl AdvancingFrontBTree {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
     pub fn new(triangle: &Triangle, triangle_id: TriangleId, points: &Points) -> Self {
@@ -72,12 +72,10 @@ impl AdvancingFront {
         self.nodes.iter().nth(n).map(|(k, v)| (k.point(), v))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (Point, &Node)> {
-        self.nodes.iter().map(|(p, n)| (p.point(), n))
+    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Point, &Node)> + 'a> {
+        Box::new(self.nodes.iter().map(|(p, n)| (p.point(), n)))
     }
-}
 
-impl AdvancingFront {
     /// locate the node containing point
     /// locate the node for `x`
     pub fn locate_node(&self, x: f64) -> Option<(Point, &Node)> {
@@ -116,87 +114,5 @@ impl AdvancingFront {
             .rev()
             .nth(0)
             .map(|(p, v)| (p.point(), v))
-    }
-}
-
-/// New type to wrap `Point` as Node's key
-#[derive(Debug, Clone, Copy)]
-struct PointKey(Point);
-
-impl PartialEq for PointKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.x.eq(&other.0.x) && self.0.y.eq(&other.0.y)
-    }
-}
-
-impl Eq for PointKey {}
-
-impl PartialOrd for PointKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.0.x.partial_cmp(&other.0.x) {
-            None | Some(Ordering::Equal) => self.0.y.partial_cmp(&other.0.y),
-            x_order => {
-                return x_order;
-            }
-        }
-    }
-}
-
-impl Ord for PointKey {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
-    }
-}
-
-impl From<Point> for PointKey {
-    fn from(value: Point) -> Self {
-        Self(value)
-    }
-}
-
-impl PointKey {
-    /// clone the point
-    fn point(&self) -> Point {
-        self.0
-    }
-}
-
-#[derive(Debug)]
-pub struct Node {
-    pub point_id: PointId,
-    /// last node's triangle is None
-    pub triangle: Option<TriangleId>,
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{shape::Point, triangles::Triangles};
-
-    use super::*;
-
-    #[test]
-    fn test_advancing_front() {
-        let mut points = Points::new(vec![]);
-        let mut triangles = Triangles::new();
-
-        let p_0 = points.add_point(Point::new(-1., 0.));
-        let p_1 = points.add_point(Point::new(0., 3.));
-        let p_2 = points.add_point(Point::new(1., 1.));
-        let triangle_id = triangles.insert(Triangle::new(p_0, p_1, p_2));
-        let triangle = triangles.get(triangle_id).unwrap();
-
-        let advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
-        {
-            let p = advancing_front.locate_node(0.).unwrap();
-            let point = p.0;
-            assert_eq!(point.x, 0.0);
-            assert_eq!(point.y, 3.0);
-
-            let prev_node = advancing_front.prev_node(point).unwrap();
-            assert_eq!(prev_node.0.x, -1.);
-
-            let next_node = advancing_front.next_node(point).unwrap();
-            assert_eq!(next_node.0.x, 1.);
-        }
     }
 }
