@@ -347,11 +347,11 @@ impl Sweeper {
         let mut legalized_triangles = FxHashSet::default();
 
         // record the task and who triggered it
-        let mut task_queue = Vec::<(TriangleId, TriangleId)>::new();
-        task_queue.push((triangle_id, TriangleId::INVALID));
+        let mut task_queue = Vec::<TriangleId>::new();
+        task_queue.push(triangle_id);
         legalized_triangles.insert(triangle_id);
 
-        while let Some((triangle_id, from_tri_id)) = task_queue.pop() {
+        while let Some(triangle_id) = task_queue.pop() {
             let mut f = || {
                 for point_idx in 0..3 {
                     let triangle = context.triangles.get_unchecked(triangle_id);
@@ -394,12 +394,10 @@ impl Sweeper {
                             context.triangles,
                         );
 
-                        task_queue.push((triangle_id, triangle_id));
+                        task_queue.push(triangle_id);
                         legalized_triangles.insert(triangle_id);
-                        if from_tri_id != opposite_triangle_id {
-                            task_queue.push((opposite_triangle_id, triangle_id));
-                            legalized_triangles.insert(opposite_triangle_id);
-                        }
+                        task_queue.push(opposite_triangle_id);
+                        legalized_triangles.insert(opposite_triangle_id);
 
                         return;
                     }
