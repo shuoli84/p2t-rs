@@ -75,8 +75,8 @@ impl Triangles {
 
     /// mark two triangle as neighbor
     pub fn mark_neighbor(&mut self, left: TriangleId, right: TriangleId) {
-        let left_triangle = self.get(left).unwrap().clone();
-        let right_triangle = self.get(right).unwrap().clone();
+        let left_triangle = self.get_unchecked(left);
+        let right_triangle = self.get_unchecked(right);
 
         let l_ei = if right_triangle
             .contains_pair((left_triangle.points[1], left_triangle.points[2]))
