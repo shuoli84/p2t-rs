@@ -170,18 +170,13 @@ impl Points {
 }
 
 struct PointRangeIter {
-    start: PointId,
     end: PointId,
     next: PointId,
 }
 
 impl PointRangeIter {
     fn new(start: PointId, end: PointId) -> Self {
-        Self {
-            start,
-            end,
-            next: start,
-        }
+        Self { end, next: start }
     }
 }
 

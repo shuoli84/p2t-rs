@@ -25,16 +25,16 @@ pub use shape::Point;
 ///
 /// # Example
 /// ```rust
-/// use
+///    use poly2tri_rs::{SweeperBuilder, Point};
 ///
-///    let mut builder = SweeperBuilder::new(vec![
+///    let builder = SweeperBuilder::new(vec![
 ///        Point::new(-10., -10.),
 ///        Point::new(810., -10.),
 ///        Point::new(810., 810.),
 ///        Point::new(-10., 810.),
-///    ]);
-///    builder.add_points(p);
-///    builder.add_hole(vec![
+///    ]).add_points(vec![
+///        Point::new(50., 50.),
+///    ]).add_hole(vec![
 ///        Point::new(400., 400.),
 ///        Point::new(600., 400.),
 ///        Point::new(600., 600.),
@@ -91,7 +91,7 @@ impl SweeperBuilder {
 
     pub fn build(self) -> Sweeper {
         Sweeper {
-            points: self.points,
+            points: self.points.into_sorted(),
             edges: self.edges_builder.build(),
         }
     }
@@ -146,10 +146,7 @@ pub struct Trianglulate {
 
 impl Sweeper {
     /// Run triangulate. This is the entry method for cdt triangulation
-    pub fn triangulate(mut self) -> Trianglulate {
-        // sort all points first
-        self.points = std::mem::take(&mut self.points).into_sorted();
-
+    pub fn triangulate(self) -> Trianglulate {
         let mut triangles = Triangles::new();
 
         let initial_triangle = triangles.insert(Triangle::new(
