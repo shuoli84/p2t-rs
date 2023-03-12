@@ -138,7 +138,7 @@ fn parse_polyline(polyline: Vec<Point>, points: &mut Points) -> Vec<Edge> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sweeper {
     points: Points,
     edges: Edges,
@@ -192,10 +192,6 @@ impl Sweeper {
 
         Self::finalize_polygon(&mut context);
         observer.finalized(&context);
-        #[cfg(feature = "draw_result")]
-        {
-            context.draw();
-        }
 
         // take result out of context
         let result = context.result;

@@ -17,7 +17,7 @@ impl PointId {
 }
 
 /// Point store
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Points {
     points: Vec<Point>,
     y_sorted: Vec<PointId>,

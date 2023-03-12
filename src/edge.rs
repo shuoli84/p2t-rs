@@ -33,7 +33,7 @@ impl EdgesBuilder {
 /// Each point may contains 0 or many edges, instead of create a vec
 /// for each point, store all points info in one big vec, and each
 /// point just stores start, end index. This reduce mem alloc dramatically
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Edges {
     edge_lower_points: Vec<PointId>,
     point_edges: rustc_hash::FxHashMap<PointId, PointEdges>,

@@ -11,6 +11,15 @@ struct Args {
     /// Name of the person to greet
     #[arg(short, long)]
     path: std::path::PathBuf,
+
+    #[arg(short, long)]
+    detail: bool,
+
+    #[arg(short, long)]
+    result: bool,
+
+    #[arg(short, long, default_value = "1")]
+    count: usize,
 }
 
 fn main() {
@@ -21,40 +30,56 @@ fn main() {
         .load(args.path.as_os_str().to_str().unwrap())
         .unwrap();
 
-    let _result = sweeper.triangulate_with_observer(DrawObserver::default());
+    for _i in 0..args.count {
+        let _result = sweeper.clone().triangulate_with_observer(DrawObserver {
+            messages: vec![],
+            detail: args.detail,
+            result: args.result,
+        });
+    }
 }
 
 #[derive(Default)]
 struct DrawObserver {
     messages: Vec<String>,
+    detail: bool,
+    result: bool,
 }
 
 impl Observer for DrawObserver {
     fn point_event(&mut self, point_id: poly2tri_rs::PointId, context: &Context) {
-        let point = context.points.get_point(point_id).unwrap();
-        self.messages
-            .push(format!("point event: {point_id:?} {point:?}"));
-        self.draw(context);
+        if self.detail {
+            let point = context.points.get_point(point_id).unwrap();
+            self.messages
+                .push(format!("point event: {point_id:?} {point:?}"));
+            self.draw(context);
+        }
     }
 
     fn edge_event(&mut self, edge: Edge, context: &Context) {
-        self.messages.push(format!(
-            "edge_event: p:{} q:{}",
-            edge.p.as_usize(),
-            edge.q.as_usize(),
-        ));
+        if self.detail {
+            self.messages.push(format!(
+                "edge_event: p:{} q:{}",
+                edge.p.as_usize(),
+                edge.q.as_usize(),
+            ));
 
-        self.draw(context);
+            self.draw(context);
+        }
     }
 
     fn sweep_done(&mut self, context: &Context) {
-        self.messages.push("sweep done".into());
-        self.draw(context);
+        if self.detail {
+            self.messages.push("sweep done".into());
+            self.draw(context);
+        }
     }
 
     fn finalized(&mut self, context: &Context) {
-        self.messages.push("finalized".into());
-        self.draw(context);
+        if self.result {
+            self.messages.push("finalized".into());
+            self.draw(context);
+        }
     }
 }
 
