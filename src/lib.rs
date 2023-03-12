@@ -368,11 +368,6 @@ impl Sweeper {
                     // if this is a constrained edge then we should not try to legalize
                     // todo: we should not set constrained here. but in create triangle
                     if opposite_triangle.constrained_edge[oi] {
-                        context.triangles.set_constrained(
-                            triangle_id,
-                            point_idx,
-                            opposite_triangle.constrained_edge[oi],
-                        );
                         continue;
                     }
 
