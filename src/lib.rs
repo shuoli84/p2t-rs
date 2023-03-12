@@ -1,6 +1,7 @@
 mod advancing_front;
 mod context;
 mod edge;
+pub mod loader;
 mod points;
 mod shape;
 mod triangles;
@@ -77,6 +78,14 @@ impl SweeperBuilder {
     pub fn add_hole(mut self, polyline: Vec<Point>) -> Self {
         let edges = parse_polyline(polyline, &mut self.points);
         self.edges_builder.add_edges(edges);
+        self
+    }
+
+    /// Add holes
+    pub fn add_holes(mut self, holes: impl IntoIterator<Item = Vec<Point>>) -> Self {
+        for polyline in holes.into_iter() {
+            self = self.add_hole(polyline);
+        }
         self
     }
 
