@@ -219,7 +219,7 @@ impl Sweeper {
                 }
             }
 
-            assert!(Self::verify_triangles(context));
+            debug_assert!(Self::verify_triangles(context));
         }
     }
 
@@ -239,7 +239,6 @@ impl Sweeper {
                 }
             }
         }
-        println!("t {t:?}");
 
         if !t.invalid() {
             Self::clean_mesh(t, context);
@@ -260,18 +259,14 @@ impl Sweeper {
 
             let tri = context.triangles.get_mut(t).unwrap();
 
-            println!("{t:?}: tri: {tri:?}");
-
             if !tri.interior {
                 tri.interior = true;
-                println!("is in");
                 context.result.push(t);
 
                 for i in 0..3 {
                     if !tri.constrained_edge[i] {
                         let new_t = tri.neighbors[i];
                         if new_t != from {
-                            println!("{t:?} -> {new_t:?}");
                             triangles.push((new_t, t));
                         }
                     }
@@ -647,6 +642,7 @@ impl Sweeper {
             let triangle = node.triangle.unwrap();
             if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
                 // the edge is already an edge of the triangle, return
+                #[cfg(feature = "draw")]
                 context
                     .messages
                     .push("the edge is already an edge of the triangle, return".to_string());
@@ -724,6 +720,7 @@ impl Sweeper {
         mut node_point: Point,
         context: &mut Context,
     ) {
+        #[cfg(feature = "draw")]
         context.messages.push(format!(
             "fill_right_above_edge_event: p:{} q:{}",
             edge.p_id().as_usize(),
@@ -1069,9 +1066,6 @@ impl Sweeper {
 
             if p == eq && op == ep {
                 if eq == edge.q_id() && ep == edge.p_id() {
-                    if (ep.0 == 3 || eq.0 == 3) && (ep.0 == 4 || eq.0 == 4) {
-                        println!("break here");
-                    }
                     context
                         .triangles
                         .get_mut_unchecked(triangle_id)
@@ -1366,7 +1360,6 @@ impl Sweeper {
 
         for t_id in triangle_ids {
             if !Self::is_legalize(t_id, context) {
-                println!("{} not legal", t_id.as_usize());
                 result = false;
             }
         }
@@ -1385,7 +1378,7 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        attach_debugger();
+        // attach_debugger();
         let file_path = "test_data/bird.dat";
 
         let points = if let Some(points) = try_load_from_file(file_path) {
