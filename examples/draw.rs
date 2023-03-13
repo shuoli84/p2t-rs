@@ -75,7 +75,7 @@ fn main() {
             result: args.result,
             legalizing: None,
             prev_detail: args.detail,
-            inspect_id: Some(203),
+            inspect_id: None,
         });
     }
 }
@@ -315,11 +315,7 @@ impl DrawObserver {
                 } else {
                     color
                 };
-                let color = if t.is_delaunay(idx, context.tick()) {
-                    black
-                } else {
-                    color
-                };
+                let color = if t.is_delaunay(idx) { black } else { color };
                 color
             };
 

@@ -223,8 +223,7 @@ impl Sweeper {
                 observer.edge_event(edge, context);
             }
 
-            // debug_assert!(Self::verify_triangles(context));
-            assert!(Self::verify_triangles(context));
+            debug_assert!(Self::verify_triangles(context));
         }
     }
 
@@ -359,8 +358,6 @@ impl Sweeper {
     fn legalize(triangle_id: TriangleId, context: &mut Context, observer: &mut impl Observer) {
         observer.will_legalize(triangle_id, context);
 
-        let tick = context.tick_legalize();
-
         // keeps record of all touched triangles, after legalize finished
         // need to remap all to the advancing front
         let mut legalized_triangles = std::mem::take(&mut context.legalize_remap_tids);
@@ -374,7 +371,7 @@ impl Sweeper {
             for point_idx in 0..3 {
                 let triangle = triangle_id.get(&context.triangles);
                 // skip legalize for constrained_edge
-                if triangle.is_constrained(point_idx) || triangle.is_delaunay(point_idx, tick) {
+                if triangle.is_constrained(point_idx) || triangle.is_delaunay(point_idx) {
                     continue;
                 }
 
@@ -397,17 +394,6 @@ impl Sweeper {
                     )
                 };
                 if illegal {
-                    // set the delaunay flag, we are going to fix it
-                    {
-                        let (t, ot) = unsafe {
-                            context
-                                .triangles
-                                .get_mut_two(triangle_id, opposite_triangle_id)
-                        };
-                        t.set_delaunay(point_idx, true, tick);
-                        ot.set_delaunay(op_idx, true, tick);
-                    }
-
                     // rotate shared edge one vertex cw to legalize it
                     let need_remap = Self::rotate_triangle_pair(
                         triangle_id,
@@ -416,6 +402,19 @@ impl Sweeper {
                         op,
                         context.triangles,
                     );
+
+                    // set the delaunay flag for the edge we just fixed
+                    {
+                        let (t, ot) = unsafe {
+                            context
+                                .triangles
+                                .get_mut_two(triangle_id, opposite_triangle_id)
+                        };
+
+                        let (t_idx, ot_idx) = t.common_edge_index(ot).unwrap();
+                        t.set_delaunay(t_idx, true);
+                        ot.set_delaunay(ot_idx, true);
+                    }
 
                     task_queue.push(triangle_id);
                     task_queue.push(opposite_triangle_id);
@@ -1303,7 +1302,6 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) -> Option<()> {
-        println!("fill basin: {node_point:?}");
         let next_node = context.advancing_front.next_node(node_point)?;
         let next_next_node = context.advancing_front.next_node(next_node.0)?;
 

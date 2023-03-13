@@ -186,21 +186,12 @@ impl Triangle {
         self.edge_attrs[edge_index].is_constrained()
     }
 
-    pub fn set_delaunay(&mut self, edge_index: usize, val: bool, tick: u64) {
-        if self.tick != tick {
-            self.clear_delaunay();
-            self.tick = tick;
-        }
-
+    pub fn set_delaunay(&mut self, edge_index: usize, val: bool) {
         self.edge_attrs[edge_index].set_delaunay(val);
     }
 
-    pub fn is_delaunay(&self, edge_index: usize, tick: u64) -> bool {
-        if self.tick != tick {
-            false
-        } else {
-            self.edge_attrs[edge_index].is_delaunay()
-        }
+    pub fn is_delaunay(&self, edge_index: usize) -> bool {
+        self.edge_attrs[edge_index].is_delaunay()
     }
 
     pub fn clear_delaunay(&mut self) {
@@ -348,6 +339,18 @@ impl Triangle {
             0b10 => 1, // 0,2 or 2,0
             _ => return None,
         })
+    }
+
+    pub fn common_edge_index(&self, other: &Self) -> Option<(usize, usize)> {
+        if let Some(r_ei) = other.edge_index(self.points[1], self.points[2]) {
+            Some((0, r_ei))
+        } else if let Some(r_ei) = other.edge_index(self.points[0], self.points[2]) {
+            Some((1, r_ei))
+        } else if let Some(r_ei) = other.edge_index(self.points[0], self.points[1]) {
+            Some((2, r_ei))
+        } else {
+            None
+        }
     }
 }
 

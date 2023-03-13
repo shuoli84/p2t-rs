@@ -152,6 +152,7 @@ impl Triangles {
     }
 
     /// mark two triangle as neighbor
+    /// also clears delaunay flag for the common edge
     pub fn mark_neighbor_for_two_mut(
         left: TriangleId,
         right: TriangleId,
@@ -180,9 +181,11 @@ impl Triangles {
 
         left_triangle.neighbors[l_ei] = right;
         left_triangle.set_constrained(l_ei, is_constrained_edge);
+        left_triangle.set_delaunay(l_ei, false);
 
         right_triangle.neighbors[r_ei] = left;
         right_triangle.set_constrained(r_ei, is_constrained_edge);
+        right_triangle.set_delaunay(r_ei, false);
     }
 }
 
