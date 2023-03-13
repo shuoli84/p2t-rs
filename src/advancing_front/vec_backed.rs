@@ -12,7 +12,7 @@ impl AdvancingFrontVec {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
     pub fn new(triangle: &Triangle, triangle_id: TriangleId, points: &Points) -> Self {
-        let mut nodes = Vec::<(PointKey, Node)>::new();
+        let mut nodes = Vec::<(PointKey, Node)>::with_capacity(32);
 
         let first_point = points
             .get_point(triangle.points[1])
