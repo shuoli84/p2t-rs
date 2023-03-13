@@ -351,55 +351,55 @@ impl Sweeper {
         legalized_triangles.push(triangle_id);
 
         while let Some(triangle_id) = task_queue.pop() {
-            let mut f = || {
-                for point_idx in 0..3 {
-                    let triangle = triangle_id.get(&context.triangles);
+            for point_idx in 0..3 {
+                let triangle = triangle_id.get(&context.triangles);
 
-                    let opposite_triangle_id = triangle.neighbors[point_idx];
-                    if opposite_triangle_id.invalid() {
-                        continue;
-                    };
-                    let opposite_triangle = opposite_triangle_id.get(&context.triangles);
+                let opposite_triangle_id = triangle.neighbors[point_idx];
+                if opposite_triangle_id.invalid() {
+                    continue;
+                };
+                let opposite_triangle = opposite_triangle_id.get(&context.triangles);
 
-                    let p = triangle.points[point_idx];
-                    let op = opposite_triangle.opposite_point(&triangle, p);
-                    let oi = opposite_triangle.point_index(op).unwrap();
+                let p = triangle.points[point_idx];
+                let op = opposite_triangle.opposite_point(&triangle, p);
+                let oi = opposite_triangle.point_index(op).unwrap();
 
-                    // if this is a constrained edge then we should not try to legalize
-                    // todo: we should not set constrained here. but in create triangle
-                    if opposite_triangle.constrained_edge[oi] {
-                        continue;
-                    }
-
-                    let illegal = unsafe {
-                        in_circle(
-                            context.points.get_point_uncheck(p),
-                            context.points.get_point_uncheck(triangle.point_ccw(p)),
-                            context.points.get_point_uncheck(triangle.point_cw(p)),
-                            context.points.get_point_uncheck(op),
-                        )
-                    };
-                    if illegal {
-                        // rotate shared edge one vertex cw to legalize it
-                        Self::rotate_triangle_pair(
-                            triangle_id,
-                            p,
-                            opposite_triangle_id,
-                            op,
-                            context.triangles,
-                        );
-
-                        task_queue.push(triangle_id);
-                        task_queue.push(opposite_triangle_id);
-
-                        legalized_triangles.push(triangle_id);
-                        legalized_triangles.push(opposite_triangle_id);
-
-                        return;
-                    }
+                // if this is a constrained edge then we should not try to legalize
+                // todo: we should not set constrained here. but in create triangle
+                if opposite_triangle.constrained_edge[oi] {
+                    continue;
                 }
-            };
-            f();
+
+                let illegal = unsafe {
+                    in_circle(
+                        context.points.get_point_uncheck(p),
+                        context.points.get_point_uncheck(triangle.point_ccw(p)),
+                        context.points.get_point_uncheck(triangle.point_cw(p)),
+                        context.points.get_point_uncheck(op),
+                    )
+                };
+                if illegal {
+                    // rotate shared edge one vertex cw to legalize it
+                    let (t_should_remap, ot_should_remap) = Self::rotate_triangle_pair(
+                        triangle_id,
+                        p,
+                        opposite_triangle_id,
+                        op,
+                        context.triangles,
+                    );
+
+                    task_queue.push(triangle_id);
+                    task_queue.push(opposite_triangle_id);
+
+                    if t_should_remap {
+                        legalized_triangles.push(triangle_id);
+                    }
+                    if ot_should_remap {
+                        legalized_triangles.push(opposite_triangle_id);
+                    }
+                    break;
+                }
+            }
         }
 
         for triangle_id in legalized_triangles.drain(..) {
@@ -413,14 +413,15 @@ impl Sweeper {
         }
     }
 
+    /// Rotate the triangle pair, returns two flag indicate (t, ot) whether candidate for af remap
     fn rotate_triangle_pair(
-        triangle_id: TriangleId,
+        t_id: TriangleId,
         p: PointId,
         ot_id: TriangleId,
         op: PointId,
         triangles: &mut Triangles,
-    ) {
-        let t = triangles.get_unchecked(triangle_id);
+    ) -> (bool, bool) {
+        let t = triangles.get_unchecked(t_id);
         let ot = triangles.get_unchecked(ot_id);
 
         let n1 = t.neighbor_ccw(p);
@@ -434,7 +435,7 @@ impl Sweeper {
         let ce4 = ot.constrained_edge_cw(op);
 
         // rotate shared edge one vertex cw to legalize it
-        let t = triangles.get_mut_unchecked(triangle_id);
+        let t = triangles.get_mut_unchecked(t_id);
         t.rotate_cw(p, op);
         t.set_constrained_edge_cw(p, ce2);
         t.set_constrained_edge_ccw(op, ce3);
@@ -446,20 +447,29 @@ impl Sweeper {
         ot.set_constrained_edge_cw(op, ce4);
         ot.clear_neighbors();
 
+        let mut t_neighbor_count = 0;
+        let mut ot_neighbor_count = 0;
+
         if !n2.invalid() {
-            triangles.mark_neighbor(triangle_id, n2);
+            triangles.mark_neighbor(t_id, n2);
+            t_neighbor_count += 1;
         }
         if !n3.invalid() {
-            triangles.mark_neighbor(triangle_id, n3);
+            triangles.mark_neighbor(t_id, n3);
+            t_neighbor_count += 1;
         }
         if !n1.invalid() {
             triangles.mark_neighbor(ot_id, n1);
+            ot_neighbor_count += 1;
         }
         if !n4.invalid() {
             triangles.mark_neighbor(ot_id, n4);
+            ot_neighbor_count += 1;
         }
 
-        triangles.mark_neighbor(triangle_id, ot_id);
+        triangles.mark_neighbor(t_id, ot_id);
+
+        (t_neighbor_count < 2, ot_neighbor_count < 2)
     }
 
     /// update advancing front node's triangle
@@ -1048,9 +1058,14 @@ impl Sweeper {
             op.get(&context.points),
         ) {
             // lets rotate shared edge one vertex cw
-            Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles);
-            Self::map_triangle_to_nodes(triangle_id, context);
-            Self::map_triangle_to_nodes(ot_id, context);
+            let (t_remap, ot_remap) =
+                Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles);
+            if t_remap {
+                Self::map_triangle_to_nodes(triangle_id, context);
+            }
+            if ot_remap {
+                Self::map_triangle_to_nodes(ot_id, context);
+            }
             // legalize later
             triangle_ids.extend([triangle_id, ot_id]);
 
