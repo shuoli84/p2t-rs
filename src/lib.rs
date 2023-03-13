@@ -354,7 +354,7 @@ impl Sweeper {
         result
     }
 
-    /// legalize the triangle, but keep the edge index
+    /// legalize the triangle
     fn legalize(triangle_id: TriangleId, context: &mut Context, observer: &mut impl Observer) {
         observer.will_legalize(triangle_id, context);
 
@@ -383,7 +383,6 @@ impl Sweeper {
 
                 let p = triangle.points[point_idx];
                 let op = opposite_triangle.opposite_point(&triangle, p);
-                let op_idx = opposite_triangle.point_index(op).unwrap();
 
                 let illegal = unsafe {
                     in_circle(
@@ -526,40 +525,27 @@ impl Sweeper {
         let prev_node = context.advancing_front.prev_node(node_point)?;
         let next_node = context.advancing_front.next_node(node_point)?;
 
-        let triangle_id = context.triangles.insert(Triangle::new(
+        let new_triangle = context.triangles.insert(Triangle::new(
             prev_node.1.point_id,
             node.point_id,
             next_node.1.point_id,
         ));
 
-        if let Some(prev_tri) = prev_node.1.triangle {
-            context.triangles.mark_neighbor(triangle_id, prev_tri);
-        }
-        if let Some(node_tri) = node.triangle {
-            context.triangles.mark_neighbor(triangle_id, node_tri);
-        }
+        context
+            .triangles
+            .mark_neighbor(new_triangle, prev_node.1.triangle.unwrap());
+        context
+            .triangles
+            .mark_neighbor(new_triangle, node.triangle.unwrap());
 
         // update prev_node's triangle to newly created
         context
             .advancing_front
-            .insert(prev_node.1.point_id, prev_node.0, triangle_id);
+            .insert(prev_node.1.point_id, prev_node.0, new_triangle);
+        // delete the node, after fill, it is covered by new triangle
+        context.advancing_front.delete(node_point);
 
-        // this node maybe shadowed by new triangle, delete it from advancing front
-        // todo: do we need to query again?
-        let node = context.advancing_front.get_node(node_point).unwrap();
-        let tri = context.triangles.get_unchecked(node.triangle.unwrap());
-        if tri.point_index(node.point_id).is_none() || !tri.neighbor_cw(node.point_id).invalid() {
-            // 1.
-            // if the node's triangle doesn't contain node, which
-            // means the legalize process rotated the tri, and mapping
-            // logic didn't get a chance to fix it. Then this node
-            // is not a valid front node.
-            // 2.
-            // node's triangle has a valid neighbor, which means the edge is not on the front
-            context.advancing_front.delete(node_point);
-        }
-
-        Self::legalize(triangle_id, context, observer);
+        Self::legalize(new_triangle, context, observer);
         Some(())
     }
 
