@@ -62,6 +62,22 @@ impl Triangles {
         self.triangles.get_mut(id.0)
     }
 
+    unsafe fn get_mut_two(
+        &mut self,
+        id_0: TriangleId,
+        id_1: TriangleId,
+    ) -> (&mut Triangle, &mut Triangle) {
+        assert!(id_0 != id_1 && id_0.0 < self.triangles.len() && id_1.0 < self.triangles.len());
+
+        let slice: *mut Triangle = self.triangles.as_mut_ptr();
+
+        // satefy: asserted that id_0 != id_1 && id_0 < len && id_1 < len
+        let ref_0 = unsafe { &mut *slice.add(id_0.0) };
+        let ref_1 = unsafe { &mut *slice.add(id_1.0) };
+
+        (ref_0, ref_1)
+    }
+
     pub fn get_mut_unchecked(&mut self, id: TriangleId) -> &mut Triangle {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
@@ -75,8 +91,7 @@ impl Triangles {
 
     /// mark two triangle as neighbor
     pub fn mark_neighbor(&mut self, left: TriangleId, right: TriangleId) {
-        let left_triangle = self.get_unchecked(left);
-        let right_triangle = self.get_unchecked(right);
+        let (left_triangle, right_triangle) = unsafe { self.get_mut_two(left, right) };
 
         let (l_ei, r_ei) = if let Some(r_ei) =
             right_triangle.edge_index(left_triangle.points[1], left_triangle.points[2])
@@ -97,17 +112,12 @@ impl Triangles {
 
         let is_constrained_edge =
             left_triangle.constrained_edge[l_ei] || right_triangle.constrained_edge[r_ei];
-        {
-            let left = self.get_mut_unchecked(left);
-            left.neighbors[l_ei] = right;
-            left.constrained_edge[l_ei] = is_constrained_edge;
-        }
 
-        {
-            let right = self.get_mut_unchecked(right);
-            right.neighbors[r_ei] = left;
-            right.constrained_edge[r_ei] = is_constrained_edge;
-        }
+        left_triangle.neighbors[l_ei] = right;
+        left_triangle.constrained_edge[l_ei] = is_constrained_edge;
+
+        right_triangle.neighbors[r_ei] = left;
+        right_triangle.constrained_edge[r_ei] = is_constrained_edge;
     }
 }
 
@@ -137,5 +147,23 @@ mod tests {
             let t = triangles.get(t2).unwrap();
             assert_eq!(t.neighbors[2], t1);
         }
+    }
+
+    #[test]
+    fn test_triangles_get_mut_two() {
+        let mut triangles = Triangles::new();
+        let mut points = Points::new(vec![]);
+
+        let p0 = points.add_point(Point::new(0., 0.));
+        let p1 = points.add_point(Point::new(2., 0.));
+        let p2 = points.add_point(Point::new(1., 2.));
+        let p3 = points.add_point(Point::new(4., 2.));
+
+        let t1 = triangles.insert(Triangle::new(p0, p1, p2));
+        let t2 = triangles.insert(Triangle::new(p1, p2, p3));
+
+        let (t1, t2) = unsafe { triangles.get_mut_two(t1, t2) };
+        assert_eq!(t1.points, [p0, p1, p2]);
+        assert_eq!(t2.points, [p1, p2, p3]);
     }
 }
