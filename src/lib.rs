@@ -11,7 +11,8 @@ use advancing_front::AdvancingFront;
 use edge::{Edges, EdgesBuilder};
 use points::Points;
 use shape::*;
-use triangles::{TriangleId, Triangles};
+pub use triangles::TriangleId;
+use triangles::Triangles;
 use utils::{in_circle, orient_2d, Orientation};
 
 use crate::utils::in_scan_area;
@@ -30,6 +31,13 @@ pub trait Observer {
     fn sweep_done(&mut self, context: &Context) {}
 
     fn finalized(&mut self, context: &Context) {}
+
+    #[inline]
+    fn will_legalize(&mut self, triangle_id: TriangleId, context: &Context) {}
+    #[inline]
+    fn legalize_step(&mut self, triangle_id: TriangleId, context: &Context) {}
+    #[inline]
+    fn legalized(&mut self, triangel_id: TriangleId, context: &Context) {}
 }
 
 impl Observer for () {}
@@ -205,17 +213,18 @@ impl Sweeper {
 
     fn sweep_points(context: &mut Context, observer: &mut impl Observer) {
         for (point_id, point) in context.points.iter_point_by_y(1) {
-            Self::point_event(point_id, point, context);
+            Self::point_event(point_id, point, context, observer);
             observer.point_event(point_id, context);
 
             for p in context.edges.p_for_q(point_id) {
                 let edge = Edge { p: *p, q: point_id };
-                Self::edge_event(edge, point, context);
+                Self::edge_event(edge, point, context, observer);
 
                 observer.edge_event(edge, context);
             }
 
-            debug_assert!(Self::verify_triangles(context));
+            // debug_assert!(Self::verify_triangles(context));
+            assert!(Self::verify_triangles(context));
         }
     }
 
@@ -282,7 +291,12 @@ impl Sweeper {
 
 /// Point event related methods
 impl Sweeper {
-    fn point_event(point_id: PointId, point: Point, context: &mut Context) {
+    fn point_event(
+        point_id: PointId,
+        point: Point,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) {
         let (node, next) = context.advancing_front.locate_node_and_next(point.x);
         let (node_point, node) = node.unwrap();
         let (_, next_node) = next.unwrap();
@@ -295,19 +309,20 @@ impl Sweeper {
         context.triangles.mark_neighbor(node_triangle, triangle);
         context.advancing_front.insert(point_id, point, triangle);
 
-        Self::legalize(triangle, context);
+        Self::legalize(triangle, context, observer);
 
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
         if point.x <= node_point.x + f64::EPSILON {
-            Self::fill_one(node_point, context);
+            Self::fill_one(node_point, context, observer);
         }
 
-        Self::fill_advancing_front(point, context);
+        Self::fill_advancing_front(point, context, observer);
     }
 
     /// helper function to check wether triangle is legal
-    fn is_legalize(triangle_id: TriangleId, context: &Context) -> bool {
+    fn is_legalize(triangle_id: TriangleId, context: &Context) -> [TriangleId; 3] {
+        let mut result = [TriangleId::INVALID; 3];
         for point_idx in 0..3 {
             let triangle = context.triangles.get_unchecked(triangle_id);
             let opposite_triangle_id = triangle.neighbors[point_idx];
@@ -333,15 +348,19 @@ impl Sweeper {
             };
 
             if inside {
-                return false;
+                result[point_idx] = opposite_triangle_id;
             }
         }
 
-        true
+        result
     }
 
     /// legalize the triangle, but keep the edge index
-    fn legalize(triangle_id: TriangleId, context: &mut Context) {
+    fn legalize(triangle_id: TriangleId, context: &mut Context, observer: &mut impl Observer) {
+        observer.will_legalize(triangle_id, context);
+
+        let tick = context.tick_legalize();
+
         // keeps record of all touched triangles, after legalize finished
         // need to remap all to the advancing front
         let mut legalized_triangles = std::mem::take(&mut context.legalize_remap_tids);
@@ -355,7 +374,7 @@ impl Sweeper {
             for point_idx in 0..3 {
                 let triangle = triangle_id.get(&context.triangles);
                 // skip legalize for constrained_edge
-                if triangle.is_constrained(point_idx) {
+                if triangle.is_constrained(point_idx) || triangle.is_delaunay(point_idx, tick) {
                     continue;
                 }
 
@@ -367,6 +386,7 @@ impl Sweeper {
 
                 let p = triangle.points[point_idx];
                 let op = opposite_triangle.opposite_point(&triangle, p);
+                let op_idx = opposite_triangle.point_index(op).unwrap();
 
                 let illegal = unsafe {
                     in_circle(
@@ -377,6 +397,17 @@ impl Sweeper {
                     )
                 };
                 if illegal {
+                    // set the delaunay flag, we are going to fix it
+                    {
+                        let (t, ot) = unsafe {
+                            context
+                                .triangles
+                                .get_mut_two(triangle_id, opposite_triangle_id)
+                        };
+                        t.set_delaunay(point_idx, true, tick);
+                        ot.set_delaunay(op_idx, true, tick);
+                    }
+
                     // rotate shared edge one vertex cw to legalize it
                     let need_remap = Self::rotate_triangle_pair(
                         triangle_id,
@@ -396,6 +427,8 @@ impl Sweeper {
                     break;
                 }
             }
+
+            observer.legalize_step(triangle_id, context);
         }
 
         for triangle_id in legalized_triangles.drain(..) {
@@ -407,6 +440,8 @@ impl Sweeper {
             context.legalize_task_queue = task_queue;
             context.legalize_remap_tids = legalized_triangles;
         }
+
+        observer.legalized(triangle_id, context);
     }
 
     /// Rotate the triangle pair, returns two flag indicate (t, ot) whether candidate for af remap
@@ -483,7 +518,11 @@ impl Sweeper {
     /// Note: The moment it filled, advancing_front is modified.
     /// if the node is covered by another triangle, then it is deleted from advancing_front.
     /// all following advancing front lookup is affected.
-    fn fill_one(node_point: Point, context: &mut Context) -> Option<()> {
+    fn fill_one(
+        node_point: Point,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) -> Option<()> {
         let node = context.advancing_front.get_node(node_point).unwrap();
         let prev_node = context.advancing_front.prev_node(node_point)?;
         let next_node = context.advancing_front.next_node(node_point)?;
@@ -506,9 +545,8 @@ impl Sweeper {
             .advancing_front
             .insert(prev_node.1.point_id, prev_node.0, triangle_id);
 
-        Self::legalize(triangle_id, context);
-
         // this node maybe shadowed by new triangle, delete it from advancing front
+        // todo: do we need to query again?
         let node = context.advancing_front.get_node(node_point).unwrap();
         let tri = context.triangles.get_unchecked(node.triangle.unwrap());
         if tri.point_index(node.point_id).is_none() || !tri.neighbor_cw(node.point_id).invalid() {
@@ -521,10 +559,16 @@ impl Sweeper {
             // node's triangle has a valid neighbor, which means the edge is not on the front
             context.advancing_front.delete(node_point);
         }
+
+        Self::legalize(triangle_id, context, observer);
         Some(())
     }
 
-    fn fill_advancing_front(node_point: Point, context: &mut Context) {
+    fn fill_advancing_front(
+        node_point: Point,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) {
         {
             // fill right holes
             let mut node_point = node_point;
@@ -535,7 +579,7 @@ impl Sweeper {
                         break;
                     }
 
-                    Self::fill_one(next_node_point, context);
+                    Self::fill_one(next_node_point, context, observer);
                     node_point = next_node_point;
                 } else {
                     break;
@@ -554,7 +598,7 @@ impl Sweeper {
                         break;
                     }
 
-                    Self::fill_one(prev_node_point, context);
+                    Self::fill_one(prev_node_point, context, observer);
                     node_point = prev_node_point;
                 } else {
                     break;
@@ -565,7 +609,7 @@ impl Sweeper {
         // file right basins
         if let Some(basin_angle) = Self::basin_angle(node_point, context.advancing_front) {
             if basin_angle < std::f64::consts::FRAC_PI_4 * 3. {
-                Self::fill_basin(node_point, context);
+                Self::fill_basin(node_point, context, observer);
             }
         }
     }
@@ -623,7 +667,12 @@ impl ConstrainedEdge {
 
 /// EdgeEvent related methods
 impl Sweeper {
-    fn edge_event(edge: Edge, node_point: Point, context: &mut Context) {
+    fn edge_event(
+        edge: Edge,
+        node_point: Point,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) {
         let p = context.points.get_point(edge.p).unwrap();
         let q = context.points.get_point(edge.q).unwrap();
 
@@ -645,7 +694,7 @@ impl Sweeper {
             }
 
             // for now we will do all needed filling
-            Self::fill_edge_event(&constrain_edge, node_point, context);
+            Self::fill_edge_event(&constrain_edge, node_point, context, observer);
         }
 
         // node's triangle may changed, get the latest
@@ -669,7 +718,7 @@ impl Sweeper {
         );
 
         for triangle_id in triangle_ids.drain(..) {
-            Self::legalize(triangle_id, context);
+            Self::legalize(triangle_id, context, observer);
         }
         context.triangle_id_queue = triangle_ids;
     }
@@ -703,11 +752,16 @@ impl Sweeper {
         }
     }
 
-    fn fill_edge_event(edge: &ConstrainedEdge, node_point: Point, context: &mut Context) {
+    fn fill_edge_event(
+        edge: &ConstrainedEdge,
+        node_point: Point,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) {
         if edge.right {
-            Self::fill_right_above_edge_event(edge, node_point, context);
+            Self::fill_right_above_edge_event(edge, node_point, context, observer);
         } else {
-            Self::fill_left_above_edge_event(edge, node_point, context);
+            Self::fill_left_above_edge_event(edge, node_point, context, observer);
         }
     }
 
@@ -715,6 +769,7 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         mut node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         while let Some((next_node_point, _)) = context.advancing_front.next_node(node_point) {
             if next_node_point.x >= edge.p.x {
@@ -723,7 +778,7 @@ impl Sweeper {
 
             // check if next node is below the edge
             if orient_2d(edge.q, next_node_point, edge.p).is_ccw() {
-                Self::fill_right_below_edge_event(edge, node_point, context);
+                Self::fill_right_below_edge_event(edge, node_point, context, observer);
             } else {
                 // try next node
                 node_point = next_node_point;
@@ -735,6 +790,7 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         if node_point.x >= edge.p.x {
             return;
@@ -745,13 +801,13 @@ impl Sweeper {
 
         if orient_2d(node_point, next_node_point, next_next_node_point).is_ccw() {
             // concave
-            Self::fill_right_concave_edge_event(edge, node_point, context);
+            Self::fill_right_concave_edge_event(edge, node_point, context, observer);
         } else {
             // convex
-            Self::fill_right_convex_edge_event(edge, node_point, context);
+            Self::fill_right_convex_edge_event(edge, node_point, context, observer);
 
             // retry this one
-            Self::fill_right_below_edge_event(edge, node_point, context);
+            Self::fill_right_below_edge_event(edge, node_point, context, observer);
         }
     }
 
@@ -760,10 +816,11 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         let (node_next_point, next_node) = context.advancing_front.next_node(node_point).unwrap();
         let next_node_point_id = next_node.point_id;
-        Self::fill_one(node_next_point, context);
+        Self::fill_one(node_next_point, context, observer);
 
         if next_node_point_id != edge.p_id() {
             // next above or below edge?
@@ -776,7 +833,7 @@ impl Sweeper {
                     .0;
                 if orient_2d(node_point, node_next_point, next_next_point).is_ccw() {
                     // next is concave
-                    Self::fill_right_concave_edge_event(edge, node_point, context);
+                    Self::fill_right_concave_edge_event(edge, node_point, context, observer);
                 } else {
                     // next is convex
                 }
@@ -788,6 +845,7 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         let (next_node_point, _) = context.advancing_front.next_node(node_point).unwrap();
         let (next_next_node_point, _) = context.advancing_front.next_node(next_node_point).unwrap();
@@ -804,13 +862,13 @@ impl Sweeper {
         .is_ccw()
         {
             // concave
-            Self::fill_right_concave_edge_event(edge, node_point, context);
+            Self::fill_right_concave_edge_event(edge, node_point, context, observer);
         } else {
             // convex
             // next above or below edge?
             if orient_2d(edge.q, next_next_node_point, edge.p).is_ccw() {
                 // Below
-                Self::fill_right_convex_edge_event(edge, next_node_point, context);
+                Self::fill_right_convex_edge_event(edge, next_node_point, context, observer);
             } else {
                 // Above
             }
@@ -821,6 +879,7 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         mut node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         while let Some((prev_node_point, _)) = context.advancing_front.prev_node(node_point) {
             // check if next node is below the edge
@@ -829,7 +888,7 @@ impl Sweeper {
             }
 
             if orient_2d(edge.q, prev_node_point, edge.p).is_cw() {
-                Self::fill_left_below_edge_event(edge, node_point, context);
+                Self::fill_left_below_edge_event(edge, node_point, context, observer);
             } else {
                 node_point = prev_node_point;
             }
@@ -840,19 +899,20 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         if node_point.x > edge.p.x {
             let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
             let (prev_prev_node_point, _) =
                 context.advancing_front.prev_node(prev_node_point).unwrap();
             if orient_2d(node_point, prev_node_point, prev_prev_node_point).is_cw() {
-                Self::fill_left_concave_edge_event(edge, node_point, context);
+                Self::fill_left_concave_edge_event(edge, node_point, context, observer);
             } else {
                 // convex
-                Self::fill_left_convex_edge_event(edge, node_point, context);
+                Self::fill_left_convex_edge_event(edge, node_point, context, observer);
 
                 // retry this one
-                Self::fill_left_below_edge_event(edge, node_point, context);
+                Self::fill_left_below_edge_event(edge, node_point, context, observer);
             }
         }
     }
@@ -861,6 +921,7 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         // next concave or convex?
         let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
@@ -878,13 +939,13 @@ impl Sweeper {
         .is_cw()
         {
             // concave
-            Self::fill_left_concave_edge_event(edge, prev_node_point, context);
+            Self::fill_left_concave_edge_event(edge, prev_node_point, context, observer);
         } else {
             // convex
             // next above or below edge?
             if orient_2d(edge.q, prev_prev_node_point, edge.p).is_cw() {
                 // below
-                Self::fill_left_convex_edge_event(edge, prev_node_point, context);
+                Self::fill_left_convex_edge_event(edge, prev_node_point, context, observer);
             } else {
                 // above
             }
@@ -895,9 +956,10 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         node_point: Point,
         context: &mut Context,
+        observer: &mut impl Observer,
     ) {
         let (prev_node_point, _) = context.advancing_front.prev_node(node_point).unwrap();
-        Self::fill_one(prev_node_point, context);
+        Self::fill_one(prev_node_point, context, observer);
 
         let (prev_node_point, prev_node) = context.advancing_front.prev_node(node_point).unwrap();
 
@@ -909,7 +971,7 @@ impl Sweeper {
                     context.advancing_front.prev_node(prev_node_point).unwrap();
                 if orient_2d(node_point, prev_node_point, prev_prev_node_point).is_cw() {
                     // next is concave
-                    Self::fill_left_concave_edge_event(edge, node_point, context);
+                    Self::fill_left_concave_edge_event(edge, node_point, context, observer);
                 } else {
                     // next is convex
                 }
@@ -1236,7 +1298,12 @@ impl Sweeper {
 
     /// basin is like a bowl, we first identify it's left, bottom, right node.
     /// then fill it
-    fn fill_basin(node_point: Point, context: &mut Context) -> Option<()> {
+    fn fill_basin(
+        node_point: Point,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) -> Option<()> {
+        println!("fill basin: {node_point:?}");
         let next_node = context.advancing_front.next_node(node_point)?;
         let next_next_node = context.advancing_front.next_node(next_node.0)?;
 
@@ -1289,17 +1356,23 @@ impl Sweeper {
                 left_higher,
             },
             context,
+            observer,
         );
 
         Some(())
     }
 
-    fn fill_basin_req(node: Point, basin: &Basin, context: &mut Context) -> Option<()> {
+    fn fill_basin_req(
+        node: Point,
+        basin: &Basin,
+        context: &mut Context,
+        observer: &mut impl Observer,
+    ) -> Option<()> {
         if basin.completed(node) {
             return None;
         }
 
-        Self::fill_one(node, context);
+        Self::fill_one(node, context, observer);
 
         // find the next node to fill
         let prev_point = context.advancing_front.prev_node(node)?.0;
@@ -1332,25 +1405,31 @@ impl Sweeper {
             }
         };
 
-        Self::fill_basin_req(new_node, basin, context)
+        Self::fill_basin_req(new_node, basin, context, observer)
     }
 }
 
 impl Sweeper {
+    pub fn verify_triangles(context: &Context) -> bool {
+        Self::illegal_triangles(context).is_empty()
+    }
+
     /// verify all triangles stored in context are legal
     #[allow(unused)]
-    pub fn verify_triangles(context: &Context) -> bool {
+    pub fn illegal_triangles(context: &Context) -> Vec<(TriangleId, TriangleId)> {
         let triangle_ids = context
             .triangles
             .iter()
             .map(|(t_id, _)| t_id)
             .collect::<Vec<_>>();
 
-        let mut result = true;
+        let mut result = Vec::<(TriangleId, TriangleId)>::new();
 
         for t_id in triangle_ids {
-            if !Self::is_legalize(t_id, context) {
-                result = false;
+            for illegal_neighbor in &Self::is_legalize(t_id, context) {
+                if !illegal_neighbor.invalid() {
+                    result.push((t_id, *illegal_neighbor));
+                }
             }
         }
 
@@ -1377,12 +1456,20 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        let mut points = Vec::<Point>::new();
-        for _ in 0..100 {
-            let x: f64 = rand::thread_rng().gen_range(0.0..800.);
-            let y: f64 = rand::thread_rng().gen_range(0.0..800.);
-            points.push(Point::new(x, y));
-        }
+        let test_path = "test_data/latest_test_data";
+        let points = match try_load_from_file(test_path) {
+            None => {
+                let mut points = Vec::<Point>::new();
+                for _ in 0..100 {
+                    let x: f64 = rand::thread_rng().gen_range(0.0..800.);
+                    let y: f64 = rand::thread_rng().gen_range(0.0..800.);
+                    points.push(Point::new(x, y));
+                }
+                save_to_file(&points, test_path);
+                points
+            }
+            Some(points) => points,
+        };
 
         let sweeper = SweeperBuilder::new(vec![
             Point::new(-10., -10.),
@@ -1399,6 +1486,8 @@ mod tests {
         ])
         .build();
         sweeper.triangulate();
+
+        delete_file(test_path);
     }
 
     fn try_load_from_file(path: &str) -> Option<Vec<Point>> {

@@ -109,6 +109,8 @@ pub struct Triangle {
 
     pub edge_attrs: [EdgeAttr; 3],
 
+    pub tick: u64,
+
     /// Has this triangle been marked as an interior triangle?
     pub interior: bool,
 }
@@ -120,6 +122,7 @@ impl Triangle {
             edge_attrs: [Default::default(), Default::default(), Default::default()],
             neighbors: [TriangleId::INVALID; 3],
             interior: false,
+            tick: 0,
         }
     }
 
@@ -183,12 +186,21 @@ impl Triangle {
         self.edge_attrs[edge_index].is_constrained()
     }
 
-    pub fn set_delaunay(&mut self, edge_index: usize, val: bool) {
+    pub fn set_delaunay(&mut self, edge_index: usize, val: bool, tick: u64) {
+        if self.tick != tick {
+            self.clear_delaunay();
+            self.tick = tick;
+        }
+
         self.edge_attrs[edge_index].set_delaunay(val);
     }
 
-    pub fn is_delaunay(&self, edge_index: usize) -> bool {
-        self.edge_attrs[edge_index].is_delaunay()
+    pub fn is_delaunay(&self, edge_index: usize, tick: u64) -> bool {
+        if self.tick != tick {
+            false
+        } else {
+            self.edge_attrs[edge_index].is_delaunay()
+        }
     }
 
     pub fn clear_delaunay(&mut self) {

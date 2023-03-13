@@ -1,7 +1,7 @@
 use clap::Parser;
 use poly2tri_rs::{
     loader::{Loader, PlainFileLoader},
-    Context, Edge, Observer,
+    Context, Edge, Observer, Point, Sweeper, SweeperBuilder, TriangleId,
 };
 
 /// Simple program to greet a person
@@ -20,21 +20,62 @@ struct Args {
 
     #[arg(short, long, default_value = "1")]
     count: usize,
+
+    #[arg(short, long, default_value = "false")]
+    test: bool,
+}
+
+fn try_load_from_file(path: &str) -> Option<Vec<Point>> {
+    let mut f = std::fs::File::options().read(true).open(path).ok()?;
+    let mut value = "".to_string();
+    std::io::Read::read_to_string(&mut f, &mut value).unwrap();
+    let mut points = vec![];
+    for line in value.lines() {
+        let mut iter = line.split_whitespace();
+        let x = iter.next().unwrap();
+        let y = iter.next().unwrap();
+
+        let x = x.parse::<f64>().unwrap();
+        let y = y.parse::<f64>().unwrap();
+        points.push(Point::new(x, y));
+    }
+
+    Some(points)
 }
 
 fn main() {
     let args = Args::parse();
 
-    let mut file_loader = PlainFileLoader::default();
-    let sweeper = file_loader
-        .load(args.path.as_os_str().to_str().unwrap())
-        .unwrap();
+    let sweeper = if args.test {
+        SweeperBuilder::new(vec![
+            Point::new(-10., -10.),
+            Point::new(810., -10.),
+            Point::new(810., 810.),
+            Point::new(-10., 810.),
+        ])
+        .add_steiner_points(try_load_from_file(args.path.as_os_str().to_str().unwrap()).unwrap())
+        .add_hole(vec![
+            Point::new(400., 400.),
+            Point::new(600., 400.),
+            Point::new(600., 600.),
+            Point::new(400., 600.),
+        ])
+        .build()
+    } else {
+        let mut file_loader = PlainFileLoader::default();
+        file_loader
+            .load(args.path.as_os_str().to_str().unwrap())
+            .unwrap()
+    };
 
     for _i in 0..args.count {
         let _result = sweeper.clone().triangulate_with_observer(DrawObserver {
             messages: vec![],
             detail: args.detail,
             result: args.result,
+            legalizing: None,
+            prev_detail: args.detail,
+            inspect_id: Some(203),
         });
     }
 }
@@ -44,10 +85,14 @@ struct DrawObserver {
     messages: Vec<String>,
     detail: bool,
     result: bool,
+    inspect_id: Option<usize>,
+    legalizing: Option<TriangleId>,
+    prev_detail: bool,
 }
 
 impl Observer for DrawObserver {
     fn point_event(&mut self, point_id: poly2tri_rs::PointId, context: &Context) {
+        println!("point event: {point_id:?}");
         if self.detail {
             let point = context.points.get_point(point_id).unwrap();
             self.messages
@@ -57,6 +102,7 @@ impl Observer for DrawObserver {
     }
 
     fn edge_event(&mut self, edge: Edge, context: &Context) {
+        println!("edge event: {edge:?}");
         if self.detail {
             self.messages.push(format!(
                 "edge_event: p:{} q:{}",
@@ -66,6 +112,52 @@ impl Observer for DrawObserver {
 
             self.draw(context);
         }
+    }
+
+    fn will_legalize(&mut self, triangle_id: TriangleId, context: &Context) {
+        self.legalizing = Some(triangle_id);
+        if self
+            .inspect_id
+            .map(|i| i == triangle_id.as_usize())
+            .unwrap_or_default()
+        {
+            self.prev_detail = self.detail;
+            self.detail = true;
+        }
+
+        if self.detail {
+            self.messages.push(format!(
+                "will legalize triangle: {}",
+                triangle_id.as_usize()
+            ));
+            self.draw(context);
+        }
+    }
+
+    fn legalize_step(&mut self, triangle_id: TriangleId, context: &Context) {
+        if self.detail {
+            self.messages.push(format!(
+                "leaglize step for t:{} this t:{}",
+                self.legalizing.unwrap().as_usize(),
+                triangle_id.as_usize()
+            ));
+            self.draw(context);
+        }
+    }
+
+    fn legalized(&mut self, triangle_id: TriangleId, context: &Context) {
+        if self.detail {
+            self.messages
+                .push(format!("leaglized triangle: {}", triangle_id.as_usize()));
+            self.draw(context);
+        }
+
+        if let Some(id) = self.inspect_id {
+            if id == triangle_id.as_usize() {
+                self.detail = self.prev_detail;
+            }
+        }
+        self.legalizing = None;
     }
 
     fn sweep_done(&mut self, context: &Context) {
@@ -216,15 +308,24 @@ impl DrawObserver {
                 center.1 * center_percent + p2.1 * point_percent,
             );
 
-            let color = if t.is_constrained(2) { yellow } else { gray };
-            let color = if t.neighbors[2].invalid() { red } else { color };
-            draw_line_segment_mut(&mut image, p0_drifted, p1_drifted, color);
-            let color = if t.is_constrained(0) { yellow } else { gray };
-            let color = if t.neighbors[0].invalid() { red } else { color };
-            draw_line_segment_mut(&mut image, p1_drifted, p2_drifted, color);
-            let color = if t.is_constrained(1) { yellow } else { gray };
-            let color = if t.neighbors[1].invalid() { red } else { color };
-            draw_line_segment_mut(&mut image, p2_drifted, p0_drifted, color);
+            let color_for_idx = |idx: usize| {
+                let color = if t.is_constrained(idx) { yellow } else { gray };
+                let color = if t.neighbors[idx].invalid() {
+                    red
+                } else {
+                    color
+                };
+                let color = if t.is_delaunay(idx, context.tick()) {
+                    black
+                } else {
+                    color
+                };
+                color
+            };
+
+            draw_line_segment_mut(&mut image, p0_drifted, p1_drifted, color_for_idx(2));
+            draw_line_segment_mut(&mut image, p1_drifted, p2_drifted, color_for_idx(0));
+            draw_line_segment_mut(&mut image, p2_drifted, p0_drifted, color_for_idx(1));
 
             draw_line_segment_mut(&mut image, p0, p1, blue);
             draw_line_segment_mut(&mut image, p1, p2, blue);
@@ -310,6 +411,44 @@ impl DrawObserver {
         for m in std::mem::take(&mut self.messages).into_iter() {
             draw_text_mut(&mut image, black, 1600, y, Scale::uniform(20.), &font, &m);
             y += 40;
+        }
+
+        let mut draw_triangle = |tid: TriangleId, fill_color: Rgb<u8>, border_color: Rgb<u8>| {
+            let t = tid.get(&context.triangles);
+            let p0 = context.points.get_point(t.points[0]).unwrap();
+            let p1 = context.points.get_point(t.points[1]).unwrap();
+            let p2 = context.points.get_point(t.points[2]).unwrap();
+
+            {
+                let p0 = map.map_point_i32(p0.x, p0.y);
+                let p1 = map.map_point_i32(p1.x, p1.y);
+                let p2 = map.map_point_i32(p2.x, p2.y);
+
+                draw_polygon_mut(
+                    &mut image,
+                    &[
+                        Point::new(p0.0, p0.1),
+                        Point::new(p1.0, p1.1),
+                        Point::new(p2.0, p2.1),
+                    ],
+                    fill_color,
+                );
+            }
+            {
+                let p0 = map.map_point_f32(p0.x, p0.y);
+                let p1 = map.map_point_f32(p1.x, p1.y);
+                let p2 = map.map_point_f32(p2.x, p2.y);
+
+                draw_line_segment_mut(&mut image, p0, p1, border_color);
+                draw_line_segment_mut(&mut image, p1, p2, border_color);
+                draw_line_segment_mut(&mut image, p2, p0, border_color);
+            }
+        };
+
+        let illegal_pairs = Sweeper::illegal_triangles(context);
+        for (from_tid, to_tid) in illegal_pairs {
+            draw_triangle(from_tid, red, black);
+            draw_triangle(to_tid, yellow, black);
         }
 
         static DRAW_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
