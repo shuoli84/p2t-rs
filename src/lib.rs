@@ -353,6 +353,9 @@ impl Sweeper {
         while let Some(triangle_id) = task_queue.pop() {
             for point_idx in 0..3 {
                 let triangle = triangle_id.get(&context.triangles);
+                if triangle.constrained_edge[point_idx] {
+                    continue;
+                }
 
                 let opposite_triangle_id = triangle.neighbors[point_idx];
                 if opposite_triangle_id.invalid() {
@@ -362,13 +365,6 @@ impl Sweeper {
 
                 let p = triangle.points[point_idx];
                 let op = opposite_triangle.opposite_point(&triangle, p);
-                let oi = opposite_triangle.point_index(op).unwrap();
-
-                // if this is a constrained edge then we should not try to legalize
-                // todo: we should not set constrained here. but in create triangle
-                if opposite_triangle.constrained_edge[oi] {
-                    continue;
-                }
 
                 let illegal = unsafe {
                     in_circle(
