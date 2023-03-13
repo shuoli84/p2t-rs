@@ -54,7 +54,7 @@ impl AdvancingFrontVec {
     /// insert a new node for point and triangle
     /// or update the node pointing to new triangle
     pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
-        assert!(!triangle_id.invalid());
+        debug_assert!(!triangle_id.invalid());
         match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => {
                 self.nodes[idx].1 = Node {

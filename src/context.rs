@@ -25,10 +25,10 @@ impl<'a> Context<'a> {
             edges,
             triangles,
             advancing_front,
-            result: Default::default(),
+            result: Vec::with_capacity(points.len()),
 
-            legalize_task_queue: Default::default(),
-            legalize_remap_tids: Default::default(),
+            legalize_task_queue: Vec::with_capacity(32),
+            legalize_remap_tids: Vec::with_capacity(32),
         }
     }
 }

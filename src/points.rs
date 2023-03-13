@@ -46,6 +46,10 @@ impl Points {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.points.len()
+    }
+
     /// only call this after all points/edge mutation done
     pub fn into_sorted(self) -> Self {
         let mut unsorted_points = self

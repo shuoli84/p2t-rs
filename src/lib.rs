@@ -164,7 +164,7 @@ impl Sweeper {
 
     /// Run triangulate. This is the entry method for cdt triangulation
     pub fn triangulate_with_observer(self, mut observer: impl Observer) -> Trianglulate {
-        let mut triangles = Triangles::new();
+        let mut triangles = Triangles::with_capacity(self.points.len());
 
         let initial_triangle = triangles.insert(Triangle::new(
             self.points.get_id_by_y(0).unwrap(),

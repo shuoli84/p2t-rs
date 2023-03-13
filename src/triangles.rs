@@ -37,6 +37,12 @@ impl Triangles {
         Self { triangles: vec![] }
     }
 
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            triangles: Vec::with_capacity(capacity),
+        }
+    }
+
     /// insert a new triangle
     pub fn insert(&mut self, triangle: Triangle) -> TriangleId {
         let id = TriangleId(self.triangles.len());
