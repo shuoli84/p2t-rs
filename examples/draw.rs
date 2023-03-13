@@ -216,13 +216,13 @@ impl DrawObserver {
                 center.1 * center_percent + p2.1 * point_percent,
             );
 
-            let color = if t.constrained_edge[2] { yellow } else { gray };
+            let color = if t.is_constrained(2) { yellow } else { gray };
             let color = if t.neighbors[2].invalid() { red } else { color };
             draw_line_segment_mut(&mut image, p0_drifted, p1_drifted, color);
-            let color = if t.constrained_edge[0] { yellow } else { gray };
+            let color = if t.is_constrained(0) { yellow } else { gray };
             let color = if t.neighbors[0].invalid() { red } else { color };
             draw_line_segment_mut(&mut image, p1_drifted, p2_drifted, color);
-            let color = if t.constrained_edge[1] { yellow } else { gray };
+            let color = if t.is_constrained(1) { yellow } else { gray };
             let color = if t.neighbors[1].invalid() { red } else { color };
             draw_line_segment_mut(&mut image, p2_drifted, p0_drifted, color);
 

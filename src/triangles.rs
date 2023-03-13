@@ -176,13 +176,13 @@ impl Triangles {
         };
 
         let is_constrained_edge =
-            left_triangle.constrained_edge[l_ei] || right_triangle.constrained_edge[r_ei];
+            left_triangle.is_constrained(l_ei) || right_triangle.is_constrained(r_ei);
 
         left_triangle.neighbors[l_ei] = right;
-        left_triangle.constrained_edge[l_ei] = is_constrained_edge;
+        left_triangle.set_constrained(l_ei, is_constrained_edge);
 
         right_triangle.neighbors[r_ei] = left;
-        right_triangle.constrained_edge[r_ei] = is_constrained_edge;
+        right_triangle.set_constrained(r_ei, is_constrained_edge);
     }
 }
 

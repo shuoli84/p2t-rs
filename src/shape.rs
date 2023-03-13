@@ -54,6 +54,51 @@ impl Point {
     }
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct EdgeAttr(u8);
+
+impl std::fmt::Debug for EdgeAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EdgeAttr")
+            .field("constrained", &self.is_constrained())
+            .field("delaunay", &self.is_delaunay())
+            .finish()
+    }
+}
+
+impl EdgeAttr {
+    const CONSTRAINED: u8 = 1;
+    const CONSTRAINED_UNSET: u8 = Self::ALL ^ Self::CONSTRAINED;
+    const DELAUNAY: u8 = 1 << 1;
+    const DELAUNAY_UNSET: u8 = Self::ALL ^ Self::DELAUNAY;
+
+    const ALL: u8 = 0xFF;
+
+    fn set_constrained(&mut self, val: bool) {
+        if val {
+            self.0 |= Self::CONSTRAINED;
+        } else {
+            self.0 &= Self::CONSTRAINED_UNSET;
+        }
+    }
+
+    fn is_constrained(&self) -> bool {
+        self.0 & Self::CONSTRAINED != 0
+    }
+
+    fn set_delaunay(&mut self, val: bool) {
+        if val {
+            self.0 |= Self::DELAUNAY;
+        } else {
+            self.0 &= Self::DELAUNAY_UNSET;
+        }
+    }
+
+    fn is_delaunay(&self) -> bool {
+        self.0 & Self::DELAUNAY != 0
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Triangle {
     /// triangle points
@@ -62,8 +107,7 @@ pub struct Triangle {
     /// neighbors
     pub neighbors: [TriangleId; 3],
 
-    /// flags to determine if an edge is a Constrained edge
-    pub constrained_edge: [bool; 3],
+    pub edge_attrs: [EdgeAttr; 3],
 
     /// Has this triangle been marked as an interior triangle?
     pub interior: bool,
@@ -73,7 +117,7 @@ impl Triangle {
     pub fn new(a: PointId, b: PointId, c: PointId) -> Self {
         Self {
             points: [a, b, c],
-            constrained_edge: [false, false, false],
+            edge_attrs: [Default::default(), Default::default(), Default::default()],
             neighbors: [TriangleId::INVALID; 3],
             interior: false,
         }
@@ -127,18 +171,74 @@ impl Triangle {
     /// set constrained flag for edge identified by `p` and `q`
     pub fn set_constrained_for_edge(&mut self, p: PointId, q: PointId) {
         if let Some(index) = self.edge_index(p, q) {
-            self.constrained_edge[index] = true;
+            self.edge_attrs[index].set_constrained(true);
+        }
+    }
+
+    pub fn set_constrained(&mut self, edge_index: usize, val: bool) {
+        self.edge_attrs[edge_index].set_constrained(val);
+    }
+
+    pub fn is_constrained(&self, edge_index: usize) -> bool {
+        self.edge_attrs[edge_index].is_constrained()
+    }
+
+    pub fn edge_attr_ccw(&self, p: PointId) -> EdgeAttr {
+        if p == self.points[0] {
+            self.edge_attrs[2]
+        } else if p == self.points[1] {
+            self.edge_attrs[0]
+        } else if p == self.points[2] {
+            self.edge_attrs[1]
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    pub fn set_edge_attr_ccw(&mut self, p: PointId, edge_attr: EdgeAttr) {
+        if p == self.points[0] {
+            self.edge_attrs[2] = edge_attr;
+        } else if p == self.points[1] {
+            self.edge_attrs[0] = edge_attr;
+        } else if p == self.points[2] {
+            self.edge_attrs[1] = edge_attr;
+        } else {
+            panic!("point not belongs to triangle");
         }
     }
 
     /// constrained edge flag for edge `ccw` to given point
     pub fn constrained_edge_ccw(&self, p: PointId) -> bool {
         if p == self.points[0] {
-            self.constrained_edge[2]
+            self.edge_attrs[2].is_constrained()
         } else if p == self.points[1] {
-            self.constrained_edge[0]
+            self.edge_attrs[0].is_constrained()
         } else if p == self.points[2] {
-            self.constrained_edge[1]
+            self.edge_attrs[1].is_constrained()
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    pub fn set_edge_attr_cw(&mut self, p: PointId, val: EdgeAttr) {
+        if p == self.points[0] {
+            self.edge_attrs[1] = val;
+        } else if p == self.points[1] {
+            self.edge_attrs[2] = val;
+        } else if p == self.points[2] {
+            self.edge_attrs[0] = val;
+        } else {
+            panic!("point not belongs to triangle");
+        }
+    }
+
+    pub fn edge_attr_cw(&self, p: PointId) -> EdgeAttr {
+        if p == self.points[0] {
+            self.edge_attrs[1]
+        } else if p == self.points[1] {
+            self.edge_attrs[2]
+        } else if p == self.points[2] {
+            self.edge_attrs[0]
         } else {
             panic!("point not belongs to triangle");
         }
@@ -147,9 +247,9 @@ impl Triangle {
     /// constrained edge flag for edge `cw` to given point
     pub fn constrained_edge_cw(&self, p: PointId) -> bool {
         match self.point_index(p) {
-            Some(0) => self.constrained_edge[1],
-            Some(1) => self.constrained_edge[2],
-            Some(2) => self.constrained_edge[0],
+            Some(0) => self.edge_attrs[1].is_constrained(),
+            Some(1) => self.edge_attrs[2].is_constrained(),
+            Some(2) => self.edge_attrs[0].is_constrained(),
             _ => panic!("point not belongs to triangle"),
         }
     }
@@ -157,11 +257,11 @@ impl Triangle {
     /// set constrained edge flag for edge `ccw` to given point
     pub fn set_constrained_edge_ccw(&mut self, p: PointId, val: bool) {
         if p == self.points[0] {
-            self.constrained_edge[2] = val;
+            self.edge_attrs[2].set_constrained(val);
         } else if p == self.points[1] {
-            self.constrained_edge[0] = val;
+            self.edge_attrs[0].set_constrained(val);
         } else if p == self.points[2] {
-            self.constrained_edge[1] = val;
+            self.edge_attrs[1].set_constrained(val);
         } else {
             panic!("point not belongs to triangle");
         }
@@ -170,11 +270,12 @@ impl Triangle {
     /// set constrained edge flag for edge `cw` to given point
     pub fn set_constrained_edge_cw(&mut self, p: PointId, val: bool) {
         if p == self.points[0] {
-            self.constrained_edge[1] = val;
+            self.edge_attrs[1].set_constrained(val);
         } else if p == self.points[1] {
-            self.constrained_edge[2] = val;
+            self.edge_attrs[2].set_constrained(val);
         } else if p == self.points[2] {
-            self.constrained_edge[0] = val;
+            self.edge_attrs[0].set_constrained(val);
+        } else if p == self.points[2] {
         } else {
             panic!("point not belongs to triangle");
         }
@@ -253,9 +354,8 @@ impl Triangle {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::PointId;
-
-    use super::Triangle;
 
     #[test]
     fn test_legalize() {
@@ -283,5 +383,25 @@ mod tests {
         let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
         t.rotate_cw(PointId(2), PointId(4));
         assert_eq!(t.points, [PointId(4), PointId(1), PointId(2)]);
+    }
+
+    #[test]
+    fn test_edge_attr() {
+        let mut attr = EdgeAttr::default();
+        assert!(!attr.is_constrained());
+        attr.set_constrained(false);
+        assert!(!attr.is_constrained());
+        attr.set_constrained(true);
+        assert!(attr.is_constrained());
+        attr.set_constrained(false);
+        assert!(!attr.is_constrained());
+
+        assert!(!attr.is_delaunay());
+        attr.set_delaunay(false);
+        assert!(!attr.is_delaunay());
+        attr.set_delaunay(true);
+        assert!(attr.is_delaunay());
+        attr.set_delaunay(false);
+        assert!(!attr.is_delaunay());
     }
 }

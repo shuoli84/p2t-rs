@@ -260,7 +260,7 @@ impl Sweeper {
                 context.result.push(t);
 
                 for i in 0..3 {
-                    if !tri.constrained_edge[i] {
+                    if !tri.is_constrained(i) {
                         let new_t = tri.neighbors[i];
                         if new_t != from {
                             triangles.push((new_t, t));
@@ -319,7 +319,7 @@ impl Sweeper {
             let op = opposite_triangle.opposite_point(&triangle, p);
             let oi = opposite_triangle.point_index(op).unwrap();
 
-            if opposite_triangle.constrained_edge[oi] {
+            if opposite_triangle.is_constrained(oi) {
                 continue;
             }
 
@@ -355,7 +355,7 @@ impl Sweeper {
             for point_idx in 0..3 {
                 let triangle = triangle_id.get(&context.triangles);
                 // skip legalize for constrained_edge
-                if triangle.constrained_edge[point_idx] {
+                if triangle.is_constrained(point_idx) {
                     continue;
                 }
 
@@ -424,19 +424,19 @@ impl Sweeper {
         let n3 = ot.neighbor_ccw(op);
         let n4 = ot.neighbor_cw(op);
 
-        let ce1 = t.constrained_edge_ccw(p);
-        let ce2 = t.constrained_edge_cw(p);
-        let ce3 = ot.constrained_edge_ccw(op);
-        let ce4 = ot.constrained_edge_cw(op);
+        let ea1 = t.edge_attr_ccw(p);
+        let ea2 = t.edge_attr_cw(p);
+        let ea3 = ot.edge_attr_ccw(op);
+        let ea4 = ot.edge_attr_cw(op);
 
         // rotate shared edge one vertex cw to legalize it
         t.rotate_cw(p, op);
         ot.rotate_cw(op, p);
 
-        t.set_constrained_edge_cw(p, ce2);
-        t.set_constrained_edge_ccw(op, ce3);
-        ot.set_constrained_edge_ccw(p, ce1);
-        ot.set_constrained_edge_cw(op, ce4);
+        t.set_edge_attr_cw(p, ea2);
+        t.set_edge_attr_ccw(op, ea3);
+        ot.set_edge_attr_ccw(p, ea1);
+        ot.set_edge_attr_cw(op, ea4);
 
         t.clear_neighbors();
         ot.clear_neighbors();
@@ -689,13 +689,13 @@ impl Sweeper {
                 return false;
             }
             Some(index) => {
-                triangle.constrained_edge[index] = true;
+                triangle.set_constrained(index, true);
 
                 // The triangle may or may not has a valid neighbor
                 let neighbor_t_id = triangle.neighbors[index];
                 if let Some(t) = triangles.get_mut(neighbor_t_id) {
                     let index = t.edge_index(p, q).unwrap();
-                    t.constrained_edge[index] = true;
+                    t.set_constrained(index, true);
                 }
 
                 true
@@ -942,7 +942,7 @@ impl Sweeper {
 
         if o1.is_collinear() {
             if let Some(edge_index) = triangle.edge_index(eq, p1) {
-                triangle.constrained_edge[edge_index] = true;
+                triangle.set_constrained(edge_index, true);
 
                 let neighbor_across_t = triangle.neighbor_across(p);
                 Self::edge_event_process(
@@ -968,7 +968,7 @@ impl Sweeper {
         );
         if o2.is_collinear() {
             if let Some(edge_index) = triangle.edge_index(eq, p2) {
-                triangle.constrained_edge[edge_index] = true;
+                triangle.set_constrained(edge_index, true);
 
                 let neighbor_across_t = triangle.neighbor_across(p);
                 Self::edge_event_process(
