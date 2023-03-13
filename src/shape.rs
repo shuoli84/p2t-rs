@@ -124,18 +124,6 @@ impl Triangle {
         }
     }
 
-    /// get the first legalizable index, needs meet two conditions:
-    /// 1. is it not constrained edge
-    /// 2. it has a valid neighbor
-    pub fn first_legalizable_idx(&self) -> Option<usize> {
-        for i in 0..3 {
-            if !self.constrained_edge[i] && !self.neighbors[i].invalid() {
-                return Some(i);
-            }
-        }
-        None
-    }
-
     /// set constrained flag for edge identified by `p` and `q`
     pub fn set_constrained_for_edge(&mut self, p: PointId, q: PointId) {
         if let Some(index) = self.edge_index(p, q) {
