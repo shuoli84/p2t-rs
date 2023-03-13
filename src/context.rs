@@ -11,6 +11,8 @@ pub struct Context<'a> {
     pub(crate) legalize_task_queue: Vec<TriangleId>,
     // reusable legalize remap triangle ids to reduce alloc overhead
     pub(crate) legalize_remap_tids: Vec<TriangleId>,
+    // reusable legalize triangle id queue
+    pub(crate) triangle_id_queue: Vec<TriangleId>,
 }
 
 impl<'a> Context<'a> {
@@ -29,6 +31,7 @@ impl<'a> Context<'a> {
 
             legalize_task_queue: Vec::with_capacity(32),
             legalize_remap_tids: Vec::with_capacity(32),
+            triangle_id_queue: Vec::with_capacity(32),
         }
     }
 }

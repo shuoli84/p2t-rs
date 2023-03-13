@@ -245,7 +245,7 @@ impl Sweeper {
 
     fn clean_mesh(triangle_id: TriangleId, context: &mut Context) -> Option<()> {
         // id and from, it should not trigger from again
-        let mut triangles = Vec::<(TriangleId, TriangleId)>::new();
+        let mut triangles = Vec::<(TriangleId, TriangleId)>::with_capacity(context.points.len());
         triangles.push((triangle_id, TriangleId::INVALID));
 
         while let Some((t, from)) = triangles.pop() {
@@ -658,7 +658,7 @@ impl Sweeper {
             .unwrap();
 
         // this triangle crosses constraint so let's flippin start!
-        let mut triangle_ids = Vec::<TriangleId>::new();
+        let mut triangle_ids = std::mem::take(&mut context.triangle_id_queue);
         Self::edge_event_process(
             edge.p,
             edge.q,
@@ -669,9 +669,10 @@ impl Sweeper {
             context,
         );
 
-        for triangle_id in triangle_ids {
+        for triangle_id in triangle_ids.drain(..) {
             Self::legalize(triangle_id, context);
         }
+        context.triangle_id_queue = triangle_ids;
     }
 
     /// try mark edge for triangle if the constrained edge already is a edge
