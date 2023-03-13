@@ -78,29 +78,18 @@ impl Triangles {
         let left_triangle = self.get_unchecked(left);
         let right_triangle = self.get_unchecked(right);
 
-        let l_ei = if right_triangle
-            .contains_pair((left_triangle.points[1], left_triangle.points[2]))
+        let (l_ei, r_ei) = if let Some(r_ei) =
+            right_triangle.edge_index(left_triangle.points[1], left_triangle.points[2])
         {
-            0
-        } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[2])) {
-            1
-        } else if right_triangle.contains_pair((left_triangle.points[0], left_triangle.points[1])) {
-            2
-        } else {
-            debug_assert!(false, "they are not neighbors");
-            return;
-        };
-
-        let r_ei = if left_triangle
-            .contains_pair((right_triangle.points[1], right_triangle.points[2]))
+            (0, r_ei)
+        } else if let Some(r_ei) =
+            right_triangle.edge_index(left_triangle.points[0], left_triangle.points[2])
         {
-            0
-        } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[2]))
+            (1, r_ei)
+        } else if let Some(r_ei) =
+            right_triangle.edge_index(left_triangle.points[0], left_triangle.points[1])
         {
-            1
-        } else if left_triangle.contains_pair((right_triangle.points[0], right_triangle.points[1]))
-        {
-            2
+            (2, r_ei)
         } else {
             debug_assert!(false, "they are not neighbors");
             return;

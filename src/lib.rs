@@ -283,8 +283,9 @@ impl Sweeper {
 /// Point event related methods
 impl Sweeper {
     fn point_event(point_id: PointId, point: Point, context: &mut Context) {
-        let (node_point, node) = context.advancing_front.locate_node(point.x).unwrap();
-        let (_, next_node) = context.advancing_front.next_node(node_point).unwrap();
+        let (node, next) = context.advancing_front.locate_node_and_next(point.x);
+        let (node_point, node) = node.unwrap();
+        let (_, next_node) = next.unwrap();
 
         let triangle =
             context
@@ -353,6 +354,7 @@ impl Sweeper {
         while let Some(triangle_id) = task_queue.pop() {
             for point_idx in 0..3 {
                 let triangle = triangle_id.get(&context.triangles);
+                // skip legalize for constrained_edge
                 if triangle.constrained_edge[point_idx] {
                     continue;
                 }
@@ -511,8 +513,6 @@ impl Sweeper {
         let node = context.advancing_front.get_node(node_point).unwrap();
         let tri = context.triangles.get_unchecked(node.triangle.unwrap());
         if tri.point_index(node.point_id).is_none() || !tri.neighbor_cw(node.point_id).invalid() {
-            // todo: we need to ensure all frontint node's triangle is updated. which means
-            //     even for node needs to delete
             // 1.
             // if the node's triangle doesn't contain node, which
             // means the legalize process rotated the tri, and mapping

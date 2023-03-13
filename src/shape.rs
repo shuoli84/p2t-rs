@@ -79,15 +79,6 @@ impl Triangle {
         }
     }
 
-    /// whether contains the point
-    pub fn contains(&self, point_id: PointId) -> bool {
-        self.points[0] == point_id || self.points[1] == point_id || self.points[2] == point_id
-    }
-
-    pub fn contains_pair(&self, points: (PointId, PointId)) -> bool {
-        self.contains(points.0) && self.contains(points.1)
-    }
-
     /// The point clockwise to given point
     pub fn point_cw(&self, point: PointId) -> PointId {
         if point == self.points[0] {
@@ -250,10 +241,11 @@ impl Triangle {
         let p_index = self.point_index(p)?;
         let q_index = self.point_index(q)?;
 
-        Some(match (p_index, q_index) {
-            (0, 1) | (1, 0) => 2,
-            (1, 2) | (2, 1) => 0,
-            (0, 2) | (2, 0) => 1,
+        // 0, 1, 2 => 00 01 10
+        Some(match p_index | q_index {
+            0b01 => 2, // 0,1 or 1,0
+            0b11 => 0, // 1,2 or 2,1
+            0b10 => 1, // 0,2 or 2,0
             _ => return None,
         })
     }
