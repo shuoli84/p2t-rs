@@ -319,6 +319,11 @@ impl Sweeper {
             let op = opposite_triangle.opposite_point(&triangle, p);
             let oi = opposite_triangle.point_index(op).unwrap();
 
+            assert_eq!(
+                triangle.constrained_edge[point_idx],
+                opposite_triangle.constrained_edge[oi]
+            );
+
             if opposite_triangle.constrained_edge[oi] {
                 continue;
             }
@@ -352,48 +357,38 @@ impl Sweeper {
         legalized_triangles.push(triangle_id);
 
         while let Some(triangle_id) = task_queue.pop() {
-            for point_idx in 0..3 {
-                let triangle = triangle_id.get(&context.triangles);
-                // skip legalize for constrained_edge
-                if triangle.constrained_edge[point_idx] {
-                    continue;
-                }
+            let triangle = triangle_id.get(&context.triangles);
+            let Some(point_idx) = triangle.first_legalizable_idx() else { continue };
+            let opposite_triangle_id = triangle.neighbors[point_idx];
+            let opposite_triangle = opposite_triangle_id.get(&context.triangles);
 
-                let opposite_triangle_id = triangle.neighbors[point_idx];
-                if opposite_triangle_id.invalid() {
-                    continue;
-                };
-                let opposite_triangle = opposite_triangle_id.get(&context.triangles);
+            let p = triangle.points[point_idx];
+            let op = opposite_triangle.opposite_point(&triangle, p);
 
-                let p = triangle.points[point_idx];
-                let op = opposite_triangle.opposite_point(&triangle, p);
+            let illegal = unsafe {
+                in_circle(
+                    context.points.get_point_uncheck(p),
+                    context.points.get_point_uncheck(triangle.point_ccw(p)),
+                    context.points.get_point_uncheck(triangle.point_cw(p)),
+                    context.points.get_point_uncheck(op),
+                )
+            };
+            if illegal {
+                // rotate shared edge one vertex cw to legalize it
+                let need_remap = Self::rotate_triangle_pair(
+                    triangle_id,
+                    p,
+                    opposite_triangle_id,
+                    op,
+                    context.triangles,
+                );
 
-                let illegal = unsafe {
-                    in_circle(
-                        context.points.get_point_uncheck(p),
-                        context.points.get_point_uncheck(triangle.point_ccw(p)),
-                        context.points.get_point_uncheck(triangle.point_cw(p)),
-                        context.points.get_point_uncheck(op),
-                    )
-                };
-                if illegal {
-                    // rotate shared edge one vertex cw to legalize it
-                    let need_remap = Self::rotate_triangle_pair(
-                        triangle_id,
-                        p,
-                        opposite_triangle_id,
-                        op,
-                        context.triangles,
-                    );
+                task_queue.push(triangle_id);
+                task_queue.push(opposite_triangle_id);
 
-                    task_queue.push(triangle_id);
-                    task_queue.push(opposite_triangle_id);
-
-                    if need_remap {
-                        legalized_triangles.push(triangle_id);
-                        legalized_triangles.push(opposite_triangle_id);
-                    }
-                    break;
+                if need_remap {
+                    legalized_triangles.push(triangle_id);
+                    legalized_triangles.push(opposite_triangle_id);
                 }
             }
         }
