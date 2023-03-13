@@ -2,14 +2,7 @@ use std::cmp::Ordering;
 
 use crate::{triangles::TriangleId, Point, PointId};
 
-#[cfg(feature = "af_btree")]
-mod btree_backed;
-#[cfg(not(feature = "af_btree"))]
 mod vec_backed;
-
-#[cfg(feature = "af_btree")]
-pub use btee_backed::AdvancingFrontBTree as AdvancingFront;
-#[cfg(not(feature = "af_btree"))]
 pub use vec_backed::AdvancingFrontVec as AdvancingFront;
 
 /// New type to wrap `Point` as Node's key
