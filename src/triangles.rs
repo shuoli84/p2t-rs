@@ -68,7 +68,7 @@ impl Triangles {
         self.triangles.get_mut(id.0)
     }
 
-    unsafe fn get_mut_two(
+    pub(crate) unsafe fn get_mut_two(
         &mut self,
         id_0: TriangleId,
         id_1: TriangleId,
@@ -82,6 +82,56 @@ impl Triangles {
         let ref_1 = unsafe { &mut *slice.add(id_1.0) };
 
         (ref_0, ref_1)
+    }
+
+    pub(crate) unsafe fn get_mut_six(
+        &mut self,
+        id_0: TriangleId,
+        id_1: TriangleId,
+        id_2: TriangleId,
+        id_3: TriangleId,
+        id_4: TriangleId,
+        id_5: TriangleId,
+    ) -> (
+        &mut Triangle,
+        &mut Triangle,
+        Option<&mut Triangle>,
+        Option<&mut Triangle>,
+        Option<&mut Triangle>,
+        Option<&mut Triangle>,
+    ) {
+        assert!(id_0 != id_1 && id_0.0 < self.triangles.len() && id_1.0 < self.triangles.len());
+
+        let slice: *mut Triangle = self.triangles.as_mut_ptr();
+
+        // satefy: asserted that id_0 != id_1 && id_0 < len && id_1 < len
+        let ref_0 = unsafe { &mut *slice.add(id_0.0) };
+        let ref_1 = unsafe { &mut *slice.add(id_1.0) };
+        let ref_2 = if !id_2.invalid() {
+            Some(unsafe { &mut *slice.add(id_2.0) })
+        } else {
+            None
+        };
+
+        let ref_3 = if !id_3.invalid() {
+            Some(unsafe { &mut *slice.add(id_3.0) })
+        } else {
+            None
+        };
+
+        let ref_4 = if !id_4.invalid() {
+            Some(unsafe { &mut *slice.add(id_4.0) })
+        } else {
+            None
+        };
+
+        let ref_5 = if !id_5.invalid() {
+            Some(unsafe { &mut *slice.add(id_5.0) })
+        } else {
+            None
+        };
+
+        (ref_0, ref_1, ref_2, ref_3, ref_4, ref_5)
     }
 
     pub fn get_mut_unchecked(&mut self, id: TriangleId) -> &mut Triangle {
@@ -98,7 +148,16 @@ impl Triangles {
     /// mark two triangle as neighbor
     pub fn mark_neighbor(&mut self, left: TriangleId, right: TriangleId) {
         let (left_triangle, right_triangle) = unsafe { self.get_mut_two(left, right) };
+        Self::mark_neighbor_for_two_mut(left, right, left_triangle, right_triangle)
+    }
 
+    /// mark two triangle as neighbor
+    pub fn mark_neighbor_for_two_mut(
+        left: TriangleId,
+        right: TriangleId,
+        left_triangle: &mut Triangle,
+        right_triangle: &mut Triangle,
+    ) {
         let (l_ei, r_ei) = if let Some(r_ei) =
             right_triangle.edge_index(left_triangle.points[1], left_triangle.points[2])
         {

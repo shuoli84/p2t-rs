@@ -417,8 +417,7 @@ impl Sweeper {
         op: PointId,
         triangles: &mut Triangles,
     ) -> bool {
-        let t = triangles.get_unchecked(t_id);
-        let ot = triangles.get_unchecked(ot_id);
+        let (t, ot) = unsafe { triangles.get_mut_two(t_id, ot_id) };
 
         let n1 = t.neighbor_ccw(p);
         let n2 = t.neighbor_cw(p);
@@ -431,36 +430,36 @@ impl Sweeper {
         let ce4 = ot.constrained_edge_cw(op);
 
         // rotate shared edge one vertex cw to legalize it
-        let t = triangles.get_mut_unchecked(t_id);
         t.rotate_cw(p, op);
+        ot.rotate_cw(op, p);
+
         t.set_constrained_edge_cw(p, ce2);
         t.set_constrained_edge_ccw(op, ce3);
-        t.clear_neighbors();
-
-        let ot = triangles.get_mut_unchecked(ot_id);
-        ot.rotate_cw(op, p);
         ot.set_constrained_edge_ccw(p, ce1);
         ot.set_constrained_edge_cw(op, ce4);
+
+        t.clear_neighbors();
         ot.clear_neighbors();
 
-        let need_remap = n1.invalid() || n2.invalid() || n3.invalid() || n4.invalid();
+        Triangles::mark_neighbor_for_two_mut(t_id, ot_id, t, ot);
 
-        if !n2.invalid() {
-            triangles.mark_neighbor(t_id, n2);
+        let (t, ot, t_n1, t_n2, t_n3, t_n4) =
+            unsafe { triangles.get_mut_six(t_id, ot_id, n1, n2, n3, n4) };
+
+        if let Some(t_n2) = t_n2 {
+            Triangles::mark_neighbor_for_two_mut(t_id, n2, t, t_n2);
         }
-        if !n3.invalid() {
-            triangles.mark_neighbor(t_id, n3);
+        if let Some(t_n3) = t_n3 {
+            Triangles::mark_neighbor_for_two_mut(t_id, n3, t, t_n3);
         }
-        if !n1.invalid() {
-            triangles.mark_neighbor(ot_id, n1);
+        if let Some(t_n1) = t_n1 {
+            Triangles::mark_neighbor_for_two_mut(ot_id, n1, ot, t_n1);
         }
-        if !n4.invalid() {
-            triangles.mark_neighbor(ot_id, n4);
+        if let Some(t_n4) = t_n4 {
+            Triangles::mark_neighbor_for_two_mut(ot_id, n4, ot, t_n4);
         }
 
-        triangles.mark_neighbor(t_id, ot_id);
-
-        need_remap
+        n1.invalid() || n2.invalid() || n3.invalid() || n4.invalid()
     }
 
     /// update advancing front node's triangle
