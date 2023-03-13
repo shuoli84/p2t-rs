@@ -3,6 +3,7 @@ use poly2tri_rs::{
     loader::{Loader, PlainFileLoader},
     Context, Edge, Observer, Point, Sweeper, SweeperBuilder, TriangleId,
 };
+use rand::Rng;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -10,7 +11,7 @@ use poly2tri_rs::{
 struct Args {
     /// Name of the person to greet
     #[arg(short, long)]
-    path: std::path::PathBuf,
+    path: Option<std::path::PathBuf>,
 
     #[arg(short, long)]
     detail: bool,
@@ -25,7 +26,7 @@ struct Args {
     test: bool,
 }
 
-fn try_load_from_file(path: &str) -> Option<Vec<Point>> {
+fn try_load_from_file(path: &std::path::PathBuf) -> Option<Vec<Point>> {
     let mut f = std::fs::File::options().read(true).open(path).ok()?;
     let mut value = "".to_string();
     std::io::Read::read_to_string(&mut f, &mut value).unwrap();
@@ -47,13 +48,25 @@ fn main() {
     let args = Args::parse();
 
     let sweeper = if args.test {
+        let points = if let Some(path) = args.path.as_ref() {
+            try_load_from_file(path).unwrap()
+        } else {
+            let mut points = Vec::<Point>::new();
+            for _ in 0..100 {
+                let x: f64 = rand::thread_rng().gen_range(0.0..800.);
+                let y: f64 = rand::thread_rng().gen_range(0.0..800.);
+                points.push(Point::new(x, y));
+            }
+            points
+        };
+
         SweeperBuilder::new(vec![
             Point::new(-10., -10.),
             Point::new(810., -10.),
             Point::new(810., 810.),
             Point::new(-10., 810.),
         ])
-        .add_steiner_points(try_load_from_file(args.path.as_os_str().to_str().unwrap()).unwrap())
+        .add_steiner_points(points)
         .add_hole(vec![
             Point::new(400., 400.),
             Point::new(600., 400.),
@@ -64,7 +77,7 @@ fn main() {
     } else {
         let mut file_loader = PlainFileLoader::default();
         file_loader
-            .load(args.path.as_os_str().to_str().unwrap())
+            .load(args.path.unwrap().as_os_str().to_str().unwrap())
             .unwrap()
     };
 
@@ -92,7 +105,6 @@ struct DrawObserver {
 
 impl Observer for DrawObserver {
     fn point_event(&mut self, point_id: poly2tri_rs::PointId, context: &Context) {
-        println!("point event: {point_id:?}");
         if self.detail {
             let point = context.points.get_point(point_id).unwrap();
             self.messages
@@ -102,7 +114,6 @@ impl Observer for DrawObserver {
     }
 
     fn edge_event(&mut self, edge: Edge, context: &Context) {
-        println!("edge event: {edge:?}");
         if self.detail {
             self.messages.push(format!(
                 "edge_event: p:{} q:{}",
@@ -135,7 +146,7 @@ impl Observer for DrawObserver {
     }
 
     fn legalize_step(&mut self, triangle_id: TriangleId, context: &Context) {
-        if self.detail {
+        if self.detail && self.inspect_id.is_some() {
             self.messages.push(format!(
                 "leaglize step for t:{} this t:{}",
                 self.legalizing.unwrap().as_usize(),
@@ -180,7 +191,6 @@ impl DrawObserver {
         use image::{Rgb, RgbImage};
         use imageproc::drawing::*;
         use imageproc::point::Point;
-        use imageproc::rect::Rect;
         use rusttype::Font;
         use rusttype::Scale;
 
@@ -216,10 +226,6 @@ impl DrawObserver {
                 let x = (x - self.from.x) / self.from.w * self.to.w + self.to.x;
                 let y = self.to.h - (y - self.from.y) / self.from.h * self.to.h + self.to.y;
                 (x, y)
-            }
-
-            fn map_size(&self, w: f64, h: f64) -> (f64, f64) {
-                (w / self.from.w * self.to.w, h / self.from.h * self.to.h)
             }
 
             fn map_point_i32(&self, x: f64, y: f64) -> (i32, i32) {
@@ -338,21 +344,7 @@ impl DrawObserver {
             );
         }
 
-        for (p, n) in context.advancing_front.iter() {
-            let (x, y) = map.map_point_i32(p.x, p.y);
-            let (w, h) = map.map_size(point_size, point_size);
-            let rect = Rect::at(x as i32, y as i32).of_size(w as u32, h as u32);
-            draw_hollow_rect_mut(&mut image, rect, red);
-            draw_text_mut(
-                &mut image,
-                black,
-                x + w as i32,
-                y,
-                Scale::uniform(10.),
-                &font,
-                format!("t:{:?}", n.triangle.map(|t| t.as_usize())).as_str(),
-            );
-
+        for (_p, n) in context.advancing_front.iter() {
             if let Some(t) = n.triangle {
                 let t = context.triangles.get(t).unwrap();
 
