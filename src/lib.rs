@@ -13,7 +13,7 @@ use points::Points;
 use shape::*;
 pub use triangles::TriangleId;
 use triangles::Triangles;
-use utils::{in_circle, orient_2d, Orientation};
+use utils::{in_circle, orient_2d, Angle, Orientation};
 
 use crate::utils::in_scan_area;
 
@@ -592,16 +592,14 @@ impl Sweeper {
         }
 
         // file right basins
-        if let Some(basin_angle) = Self::basin_angle(node_point, context.advancing_front) {
-            if basin_angle < std::f64::consts::FRAC_PI_4 * 3. {
-                Self::fill_basin(node_point, context, observer);
-            }
+        if Self::basin_angle_satisfy(node_point, context) {
+            Self::fill_basin(node_point, context, observer);
         }
     }
 
     fn large_hole_dont_fill(node_point: Point, advancing_front: &AdvancingFront) -> bool {
-        let (next_point, _next_node) = advancing_front.next_node(node_point).unwrap();
-        let (prev_point, _prev_node) = advancing_front.prev_node(node_point).unwrap();
+        let (next_point, _) = advancing_front.next_node(node_point).unwrap();
+        let (prev_point, _) = advancing_front.prev_node(node_point).unwrap();
 
         let angle = utils::Angle::new(node_point, next_point, prev_point);
         if angle.exceeds_90_degree() {
@@ -610,9 +608,6 @@ impl Sweeper {
         if angle.is_negative() {
             return true;
         }
-
-        // the original implentation also add two new check, which is not stated in the paper.
-        // I just leave it later, will try it when have deeper understanding.
 
         true
     }
@@ -1272,13 +1267,19 @@ impl Basin {
 
 /// Basin related methods
 impl Sweeper {
-    fn basin_angle(node_point: Point, advancing_front: &AdvancingFront) -> Option<f64> {
-        let (next_point, _) = advancing_front.next_node(node_point)?;
-        let (next_next_point, _) = advancing_front.next_node(next_point)?;
+    fn basin_angle_satisfy(node_point: Point, context: &Context) -> bool {
+        const TAN_3_4_PI: f64 = -1.0000000000000002;
+        let Some((next_point, _)) = context.advancing_front.next_node(node_point) else { return false };
+        let Some((next_next_point, _)) = context.advancing_front.next_node(next_point) else { return false };
 
         let ax = node_point.x - next_next_point.x;
         let ay = node_point.y - next_next_point.y;
-        Some(ay.atan2(ax))
+        // the basin angle is (1/2pi, pi), so as long as tan value is less than 3/4 pi's, then its angle is less than 3/4 pi
+        if ax > 0. {
+            ay < TAN_3_4_PI * ax
+        } else {
+            ay > TAN_3_4_PI * ax
+        }
     }
 
     /// basin is like a bowl, we first identify it's left, bottom, right node.
