@@ -423,6 +423,9 @@ impl Sweeper {
                         legalized_triangles.push(opposite_triangle_id);
                     }
                     break;
+                } else {
+                    // though we can set delaunay edge to prevent future recalulate
+                    // it turns out slower, it means the recalculation is not many
                 }
             }
 
@@ -1069,7 +1072,7 @@ impl Sweeper {
         edge: &ConstrainedEdge,
         triangle_id: TriangleId,
         p: PointId,
-        triangle_ids: &mut Vec<TriangleId>,
+        legalize_queue: &mut Vec<TriangleId>,
         context: &mut Context,
     ) {
         assert!(!triangle_id.invalid());
@@ -1094,7 +1097,7 @@ impl Sweeper {
                 Self::map_triangle_to_nodes(ot_id, context);
             }
             // legalize later
-            triangle_ids.extend([triangle_id, ot_id]);
+            legalize_queue.extend([triangle_id, ot_id]);
 
             if p == eq && op == ep {
                 if eq == edge.q_id() && ep == edge.p_id() {
@@ -1107,9 +1110,6 @@ impl Sweeper {
                         .triangles
                         .get_mut_unchecked(ot_id)
                         .set_constrained_for_edge(ep, eq);
-                } else {
-                    // original comment: I think one of the triangles should be legalized here?
-                    // todo: figure this out
                 }
             } else {
                 let o = orient_2d(
@@ -1118,8 +1118,8 @@ impl Sweeper {
                     ep.get(&context.points),
                 );
 
-                let t = Self::next_flip_triangle(o, triangle_id, ot_id, triangle_ids);
-                Self::flip_edge_event(ep, eq, edge, t, p, triangle_ids, context);
+                let t = Self::next_flip_triangle(o, triangle_id, ot_id, legalize_queue);
+                Self::flip_edge_event(ep, eq, edge, t, p, legalize_queue, context);
             }
         } else {
             let new_p = Self::next_flip_point(ep, eq, ot_id, op, context);
@@ -1130,10 +1130,10 @@ impl Sweeper {
                 triangle_id,
                 ot_id,
                 new_p,
-                triangle_ids,
+                legalize_queue,
                 context,
             );
-            Self::edge_event_process(ep, eq, edge, triangle_id, p, triangle_ids, context);
+            Self::edge_event_process(ep, eq, edge, triangle_id, p, legalize_queue, context);
         }
     }
 
@@ -1268,13 +1268,15 @@ impl Basin {
 /// Basin related methods
 impl Sweeper {
     fn basin_angle_satisfy(node_point: Point, context: &Context) -> bool {
-        const TAN_3_4_PI: f64 = -1.0000000000000002;
+        const TAN_3_4_PI: f64 = -1.;
         let Some((next_point, _)) = context.advancing_front.next_node(node_point) else { return false };
         let Some((next_next_point, _)) = context.advancing_front.next_node(next_point) else { return false };
 
         let ax = node_point.x - next_next_point.x;
         let ay = node_point.y - next_next_point.y;
         // the basin angle is (1/2pi, pi), so as long as tan value is less than 3/4 pi's, then its angle is less than 3/4 pi
+
+        // ay / ax < tan(3/4 * PI)
         if ax > 0. {
             ay < TAN_3_4_PI * ax
         } else {

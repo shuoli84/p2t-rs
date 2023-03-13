@@ -103,42 +103,56 @@ pub fn in_scan_area(a: Point, b: Point, c: Point, d: Point) -> bool {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Angle(f64);
+pub struct Angle {
+    dy: f64,
+    dx: f64,
+}
 
 impl Angle {
     /// Create angle from three points, is the angle for aob
     pub fn new(o: Point, a: Point, b: Point) -> Self {
-        Self(angle(o, a, b))
+        let ox = o.x;
+        let oy = o.y;
+        let dax = a.x - ox;
+        let day = a.y - oy;
+        let dbx = b.x - ox;
+        let dby = b.y - oy;
+        let y = dax * dby - day * dbx;
+        let x = dax * dbx + day * dby;
+        Angle { dy: y, dx: x }
     }
 
     /// whether the angle exceeds PI / 2
     pub fn exceeds_90_degree(&self) -> bool {
-        self.0 > std::f64::consts::FRAC_PI_2
+        // * `x = 0`, `y = 0`: `0`
+        // * `x >= 0`: `arctan(y/x)` -> `[-pi/2, pi/2]`
+        // * `y >= 0`: `arctan(y/x) + pi` -> `(pi/2, pi]`
+        // * `y < 0`: `arctan(y/x) - pi` -> `(-pi, -pi/2)`
+
+        if self.dx == 0. && self.dy == 0. {
+            false
+        } else if self.dx >= 0. {
+            false
+        } else {
+            // self.dx < 0.
+            self.dy > 0.
+        }
     }
 
     /// whether the angle is negative
     pub fn is_negative(&self) -> bool {
-        self.0 < 0.
+        if self.dx == 0. && self.dy == 0. {
+            false
+        } else if self.dx >= 0. {
+            self.dy < 0.
+        } else {
+            self.dy < 0.
+        }
     }
-}
-
-/// Calculate angle for aob in radians
-pub fn angle(o: Point, a: Point, b: Point) -> f64 {
-    let ox = o.x;
-    let oy = o.y;
-    let dax = a.x - ox;
-    let day = a.y - oy;
-    let dbx = b.x - ox;
-    let dby = b.y - oy;
-    let x = dax * dby - day * dbx;
-    let y = dax * dbx + day * dby;
-    x.atan2(y)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::f64::consts::PI;
-
     use super::*;
 
     #[test]
@@ -174,9 +188,40 @@ mod tests {
 
     #[test]
     fn test_angle() {
-        assert_eq!(
-            angle(Point::new(0., 0.), Point::new(1., 0.), Point::new(1., 1.)),
-            PI / 4.
+        let angle = Angle::new(Point::new(0., 0.), Point::new(1., 0.), Point::new(1., 1.));
+        assert!(!dbg!(angle).exceeds_90_degree());
+        assert!(!angle.is_negative());
+
+        let angle = Angle::new(Point::new(0., 0.), Point::new(0.1, 1.), Point::new(1., 0.));
+        assert!(!dbg!(angle).exceeds_90_degree());
+        assert!(angle.is_negative());
+
+        let angle = Angle::new(Point::new(0., 0.), Point::new(0., -1.), Point::new(1., 0.));
+        assert!(!angle.exceeds_90_degree());
+        assert!(!angle.is_negative());
+
+        let angle = Angle::new(
+            Point::new(0., 0.),
+            Point::new(-1., -0.1),
+            Point::new(1., 0.),
         );
+        assert!(angle.exceeds_90_degree());
+        assert!(!angle.is_negative());
+
+        let angle = Angle::new(
+            Point::new(0., 0.),
+            Point::new(1.0, 0.),
+            Point::new(-1., -0.1),
+        );
+        assert!(angle.is_negative());
+        assert!(!angle.exceeds_90_degree());
+
+        let angle = Angle::new(
+            Point::new(0., 0.),
+            Point::new(1.0, 0.),
+            Point::new(-1., 0.1),
+        );
+        assert!(!dbg!(angle).is_negative());
+        assert!(angle.exceeds_90_degree());
     }
 }
