@@ -194,12 +194,6 @@ impl Triangle {
         self.edge_attrs[edge_index].is_delaunay()
     }
 
-    pub fn clear_delaunay(&mut self) {
-        for i in 0..3 {
-            self.edge_attrs[i].set_delaunay(false);
-        }
-    }
-
     pub fn edge_attr_ccw(&self, p: PointId) -> EdgeAttr {
         if p == self.points[0] {
             self.edge_attrs[2]
@@ -219,19 +213,6 @@ impl Triangle {
             self.edge_attrs[0] = edge_attr;
         } else if p == self.points[2] {
             self.edge_attrs[1] = edge_attr;
-        } else {
-            panic!("point not belongs to triangle");
-        }
-    }
-
-    /// constrained edge flag for edge `ccw` to given point
-    pub fn constrained_edge_ccw(&self, p: PointId) -> bool {
-        if p == self.points[0] {
-            self.edge_attrs[2].is_constrained()
-        } else if p == self.points[1] {
-            self.edge_attrs[0].is_constrained()
-        } else if p == self.points[2] {
-            self.edge_attrs[1].is_constrained()
         } else {
             panic!("point not belongs to triangle");
         }

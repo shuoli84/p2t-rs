@@ -13,7 +13,7 @@ use points::Points;
 use shape::*;
 pub use triangles::TriangleId;
 use triangles::Triangles;
-use utils::{in_circle, orient_2d, Angle, Orientation};
+use utils::{in_circle, orient_2d, Orientation};
 
 use crate::utils::in_scan_area;
 
