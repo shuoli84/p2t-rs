@@ -136,7 +136,7 @@ impl Observer for DrawObserver {
             self.detail = true;
         }
 
-        if self.detail {
+        if self.detail && self.inspect_id.is_some() {
             self.messages.push(format!(
                 "will legalize triangle: {}",
                 triangle_id.as_usize()
