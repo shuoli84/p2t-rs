@@ -376,7 +376,7 @@ impl Sweeper {
                 };
                 if illegal {
                     // rotate shared edge one vertex cw to legalize it
-                    let (t_should_remap, ot_should_remap) = Self::rotate_triangle_pair(
+                    let need_remap = Self::rotate_triangle_pair(
                         triangle_id,
                         p,
                         opposite_triangle_id,
@@ -387,10 +387,8 @@ impl Sweeper {
                     task_queue.push(triangle_id);
                     task_queue.push(opposite_triangle_id);
 
-                    if t_should_remap {
+                    if need_remap {
                         legalized_triangles.push(triangle_id);
-                    }
-                    if ot_should_remap {
                         legalized_triangles.push(opposite_triangle_id);
                     }
                     break;
@@ -416,7 +414,7 @@ impl Sweeper {
         ot_id: TriangleId,
         op: PointId,
         triangles: &mut Triangles,
-    ) -> (bool, bool) {
+    ) -> bool {
         let t = triangles.get_unchecked(t_id);
         let ot = triangles.get_unchecked(ot_id);
 
@@ -443,29 +441,24 @@ impl Sweeper {
         ot.set_constrained_edge_cw(op, ce4);
         ot.clear_neighbors();
 
-        let mut t_neighbor_count = 0;
-        let mut ot_neighbor_count = 0;
+        let need_remap = n1.invalid() || n2.invalid() || n3.invalid() || n4.invalid();
 
         if !n2.invalid() {
             triangles.mark_neighbor(t_id, n2);
-            t_neighbor_count += 1;
         }
         if !n3.invalid() {
             triangles.mark_neighbor(t_id, n3);
-            t_neighbor_count += 1;
         }
         if !n1.invalid() {
             triangles.mark_neighbor(ot_id, n1);
-            ot_neighbor_count += 1;
         }
         if !n4.invalid() {
             triangles.mark_neighbor(ot_id, n4);
-            ot_neighbor_count += 1;
         }
 
         triangles.mark_neighbor(t_id, ot_id);
 
-        (t_neighbor_count < 2, ot_neighbor_count < 2)
+        need_remap
     }
 
     /// update advancing front node's triangle
@@ -1054,12 +1047,8 @@ impl Sweeper {
             op.get(&context.points),
         ) {
             // lets rotate shared edge one vertex cw
-            let (t_remap, ot_remap) =
-                Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles);
-            if t_remap {
+            if Self::rotate_triangle_pair(triangle_id, p, ot_id, op, &mut context.triangles) {
                 Self::map_triangle_to_nodes(triangle_id, context);
-            }
-            if ot_remap {
                 Self::map_triangle_to_nodes(ot_id, context);
             }
             // legalize later
