@@ -23,3 +23,6 @@ harness = false
 [features]
 default = []
 af_btree = []
+
+[profile.release]
+debug = true

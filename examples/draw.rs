@@ -24,6 +24,9 @@ struct Args {
 
     #[arg(long, default_value = "false")]
     debug: bool,
+
+    #[arg(long, default_value = "1")]
+    bench_count: usize,
 }
 
 fn try_load_from_file(path: &std::path::PathBuf) -> Option<Vec<Point>> {
@@ -80,19 +83,28 @@ fn main() {
             .unwrap()
     };
 
-    let mut observer = DrawObserver::new(&args);
-    let _result = sweeper_builder
-        .clone()
-        .build()
-        .triangulate_with_observer(&mut observer);
+    if args.bench_count == 1 {
+        let mut observer = DrawObserver::new(&args);
+        let _result = sweeper_builder
+            .clone()
+            .build()
+            .triangulate_with_observer(&mut observer);
+        observer.save();
 
-    // we measure time with dummy observer
-    let start = std::time::Instant::now();
-    let _ = sweeper_builder.build().triangulate();
-    let end = std::time::Instant::now();
-    let duration = end.duration_since(start);
-    println!("{:?} elapsed", duration);
-    observer.save();
+        // we measure time with dummy observer
+        let start = std::time::Instant::now();
+        let count = 1000;
+        for _ in 0..count {
+            let _ = sweeper_builder.clone().build().triangulate();
+        }
+        let end = std::time::Instant::now();
+        let duration = end.duration_since(start) / count;
+        println!("{:?} elapsed", duration);
+    } else {
+        for _ in 0..args.bench_count {
+            let _ = sweeper_builder.clone().build().triangulate();
+        }
+    }
 }
 
 struct DrawObserver {
