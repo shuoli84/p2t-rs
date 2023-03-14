@@ -7,12 +7,42 @@ use crate::shape::Point;
 pub struct PointId(pub(crate) usize);
 
 impl PointId {
-    pub fn get(&self, points: &Points) -> Point {
-        unsafe { points.get_point_uncheck(*self) }
-    }
-
+    /// Get the inner value as usize
     pub fn as_usize(&self) -> usize {
         self.0
+    }
+
+    /// helper method used in the crate when I know the `PointId` is valid in `Points`
+    pub(crate) fn get(&self, points: &Points) -> Point {
+        unsafe { points.get_point_uncheck(*self) }
+    }
+}
+
+#[derive(Default)]
+pub struct PointsBuilder {
+    points: Vec<Point>,
+}
+
+impl PointsBuilder {
+    /// Create a new builder
+    pub fn new(points: Vec<Point>) -> Self {
+        Self { points }
+    }
+
+    /// Add a point
+    pub fn add_point(&mut self, point: Point) -> PointId {
+        let point_id = PointId(self.points.len());
+        self.points.push(point);
+        point_id
+    }
+
+    /// Add all `points`
+    pub fn add_points(&mut self, points: impl IntoIterator<Item = Point>) {
+        self.points.extend(points);
+    }
+
+    pub fn build(self) -> Points {
+        Points::new(self.points)
     }
 }
 
@@ -25,40 +55,15 @@ pub struct Points {
     pub tail: PointId,
 }
 
-impl Default for Points {
-    fn default() -> Self {
-        Self {
-            points: vec![],
-            y_sorted: vec![],
-            head: PointId(0),
-            tail: PointId(0),
-        }
-    }
-}
-
 impl Points {
-    pub fn new(points: Vec<Point>) -> Self {
-        Self {
-            points,
-            y_sorted: vec![],
-            head: PointId(0),
-            tail: PointId(0),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.points.len()
-    }
-
-    /// only call this after all points/edge mutation done
-    pub fn into_sorted(self) -> Self {
-        let mut unsorted_points = self
-            .points
+    pub fn new(mut points: Vec<Point>) -> Self {
+        let mut unsorted_points = points
             .iter()
             .enumerate()
             .map(|(idx, p)| (PointId(idx), p))
             .collect::<Vec<_>>();
 
+        // sort by y
         unsorted_points.sort_by(|p1, p2| {
             let p1 = p1.1;
             let p2 = p2.1;
@@ -79,8 +84,6 @@ impl Points {
             .into_iter()
             .map(|(idx, _)| idx)
             .collect::<Vec<_>>();
-
-        let mut points = self.points;
 
         let (head, tail) = {
             let mut xmax = points[0].x;
@@ -115,22 +118,8 @@ impl Points {
         }
     }
 
-    /// Add a point
-    pub fn add_point(&mut self, point: Point) -> PointId {
-        let point_id = PointId(self.points.len());
-        self.points.push(point);
-        point_id
-    }
-
-    /// Add all `points`
-    pub fn add_points(
-        &mut self,
-        points: impl IntoIterator<Item = Point>,
-    ) -> impl Iterator<Item = PointId> + 'static {
-        let start_point = PointId(self.points.len());
-        self.points.extend(points);
-        let end_point = PointId(self.points.len());
-        PointRangeIter::new(start_point, end_point)
+    pub fn len(&self) -> usize {
+        self.points.len()
     }
 
     /// get point for id
@@ -174,45 +163,20 @@ impl Points {
     }
 }
 
-struct PointRangeIter {
-    end: PointId,
-    next: PointId,
-}
-
-impl PointRangeIter {
-    fn new(start: PointId, end: PointId) -> Self {
-        Self { end, next: start }
-    }
-}
-
-impl Iterator for PointRangeIter {
-    type Item = PointId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next;
-        if next != self.end {
-            self.next.0 += 1;
-            Some(next)
-        } else {
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_points() {
-        let points = Points::new(vec![
+        let builder = PointsBuilder::new(vec![
             Point::new(1., 1.),
             Point::new(1., 2.),
             Point::new(1., 5.),
             Point::new(1., 3.),
         ]);
 
-        let points = points.into_sorted();
+        let points = builder.build();
 
         assert_eq!(points.get_point_by_y(0).unwrap().y, 1.);
         assert_eq!(points.get_point_by_y(1).unwrap().y, 2.);

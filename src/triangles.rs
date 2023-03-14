@@ -11,11 +11,11 @@ impl TriangleId {
         self.0 == Self::INVALID.0
     }
 
-    pub fn get<'a, 'b>(&'a self, triangles: &'b Triangles) -> &'b InnerTriangle {
+    pub fn get<'a, 'b>(&'a self, triangles: &'b TriangleStore) -> &'b InnerTriangle {
         triangles.get_unchecked(*self)
     }
 
-    pub fn try_get<'a, 'b>(&'a self, triangles: &'b Triangles) -> Option<&'b InnerTriangle> {
+    pub fn try_get<'a, 'b>(&'a self, triangles: &'b TriangleStore) -> Option<&'b InnerTriangle> {
         triangles.get(*self)
     }
 
@@ -28,11 +28,11 @@ impl TriangleId {
 // Note: For n vetexes, there will around n - 2 triangles, so space complexity is
 //       O(n).
 #[derive(Debug)]
-pub struct Triangles {
+pub struct TriangleStore {
     triangles: Vec<InnerTriangle>,
 }
 
-impl Triangles {
+impl TriangleStore {
     pub fn new() -> Self {
         Self { triangles: vec![] }
     }
@@ -191,14 +191,14 @@ impl Triangles {
 
 #[cfg(test)]
 mod tests {
-    use crate::{points::Points, shape::Point};
+    use crate::{points::PointsBuilder, shape::Point};
 
     use super::*;
 
     #[test]
     fn test_triangles() {
-        let mut triangles = Triangles::new();
-        let mut points = Points::new(vec![]);
+        let mut triangles = TriangleStore::new();
+        let mut points = PointsBuilder::new(vec![]);
 
         let p0 = points.add_point(Point::new(0., 0.));
         let p1 = points.add_point(Point::new(2., 0.));
@@ -219,8 +219,8 @@ mod tests {
 
     #[test]
     fn test_triangles_get_mut_two() {
-        let mut triangles = Triangles::new();
-        let mut points = Points::new(vec![]);
+        let mut triangles = TriangleStore::new();
+        let mut points = PointsBuilder::new(vec![]);
 
         let p0 = points.add_point(Point::new(0., 0.));
         let p1 = points.add_point(Point::new(2., 0.));

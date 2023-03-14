@@ -58,19 +58,21 @@ pub struct Node {
 mod tests {
     use super::*;
     use crate::{
-        points::Points,
+        points::PointsBuilder,
         shape::{InnerTriangle, Point},
-        triangles::Triangles,
+        triangles::TriangleStore,
     };
 
     #[test]
     fn test_advancing_front() {
-        let mut points = Points::new(vec![]);
-        let mut triangles = Triangles::new();
+        let mut triangles = TriangleStore::new();
 
+        let mut points = PointsBuilder::default();
         let p_0 = points.add_point(Point::new(-1., 0.));
         let p_1 = points.add_point(Point::new(0., 3.));
         let p_2 = points.add_point(Point::new(1., 1.));
+        let points = points.build();
+
         let triangle_id = triangles.insert(InnerTriangle::new(p_0, p_1, p_2));
         let triangle = triangles.get(triangle_id).unwrap();
 

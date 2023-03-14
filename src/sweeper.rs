@@ -1,8 +1,8 @@
 use crate::advancing_front::AdvancingFront;
 use crate::edge::{Edges, EdgesBuilder};
-use crate::points::Points;
+use crate::points::{Points, PointsBuilder};
 use crate::triangles::TriangleId;
-use crate::triangles::Triangles;
+use crate::triangles::TriangleStore;
 use crate::utils::{in_circle, in_scan_area, orient_2d, Orientation};
 use crate::{shape::*, Context, PointId, Triangle};
 
@@ -61,21 +61,20 @@ impl Observer for () {}
 /// ```
 
 pub struct SweeperBuilder {
+    points_builder: PointsBuilder,
     edges_builder: EdgesBuilder,
-    points: Points,
 }
 
 impl SweeperBuilder {
     /// Create a new Builder with polyline
     /// There should be only one polyline, and multiple holes and steiner points supported
     pub fn new(polyline: Vec<Point>) -> Self {
-        let mut points = Points::new(vec![]);
-
-        let edges = parse_polyline(polyline, &mut points);
+        let mut points_builder = PointsBuilder::new(vec![]);
+        let edges = parse_polyline(polyline, &mut points_builder);
 
         Self {
             edges_builder: EdgesBuilder::new(edges),
-            points,
+            points_builder,
         }
     }
 
@@ -83,19 +82,19 @@ impl SweeperBuilder {
     /// NOTE: if the point locates outside of polyline, then it has no
     /// effect on the final result
     pub fn add_steiner_point(mut self, point: Point) -> Self {
-        self.points.add_point(point);
+        self.points_builder.add_point(point);
         self
     }
 
     /// Add multiple [`Point`], batch version for `Self::add_point`
     pub fn add_steiner_points(mut self, points: impl IntoIterator<Item = Point>) -> Self {
-        let _ = self.points.add_points(points);
+        let _ = self.points_builder.add_points(points);
         self
     }
 
     /// Add a hole defined by polyline.
     pub fn add_hole(mut self, polyline: Vec<Point>) -> Self {
-        let edges = parse_polyline(polyline, &mut self.points);
+        let edges = parse_polyline(polyline, &mut self.points_builder);
         self.edges_builder.add_edges(edges);
         self
     }
@@ -111,7 +110,7 @@ impl SweeperBuilder {
     /// build the sweeper
     pub fn build(self) -> Sweeper {
         Sweeper {
-            points: self.points.into_sorted(),
+            points: self.points_builder.build(),
             edges: self.edges_builder.build(),
         }
     }
@@ -125,11 +124,11 @@ pub struct Sweeper {
 }
 
 /// The result of triangulate
-struct Trianglulate {
+pub struct Triangles {
     /// points store, it includes all points, including ones in hole
     points: Points,
     /// including all triangles, including ones in hole
-    triangles: Triangles,
+    triangles: TriangleStore,
     /// final result `TriangleId`s
     result: Vec<TriangleId>,
 
@@ -137,7 +136,7 @@ struct Trianglulate {
     next: usize,
 }
 
-impl Iterator for Trianglulate {
+impl Iterator for Triangles {
     type Item = Triangle;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -164,16 +163,13 @@ impl Iterator for Trianglulate {
 
 impl Sweeper {
     /// Run trianglate with dummy observer
-    pub fn triangulate(self) -> impl Iterator<Item = Triangle> {
+    pub fn triangulate(self) -> Triangles {
         self.triangulate_with_observer(&mut ())
     }
 
     /// Run triangulate with observer
-    pub fn triangulate_with_observer(
-        self,
-        observer: &mut impl Observer,
-    ) -> impl Iterator<Item = Triangle> {
-        let mut triangles = Triangles::with_capacity(self.points.len());
+    pub fn triangulate_with_observer(self, observer: &mut impl Observer) -> Triangles {
+        let mut triangles = TriangleStore::with_capacity(self.points.len());
 
         let initial_triangle = triangles.insert(InnerTriangle::new(
             self.points.get_id_by_y(0).unwrap(),
@@ -204,7 +200,7 @@ impl Sweeper {
         // take result out of context
         let result = context.result;
 
-        Trianglulate {
+        Triangles {
             points: self.points,
             triangles,
             result,
@@ -456,7 +452,7 @@ impl Sweeper {
         p: PointId,
         ot_id: TriangleId,
         op: PointId,
-        triangles: &mut Triangles,
+        triangles: &mut TriangleStore,
     ) -> bool {
         let (t, ot) = unsafe { triangles.get_mut_two(t_id, ot_id) };
 
@@ -482,22 +478,22 @@ impl Sweeper {
         t.clear_neighbors();
         ot.clear_neighbors();
 
-        Triangles::mark_neighbor_for_two_mut(t_id, ot_id, t, ot);
+        TriangleStore::mark_neighbor_for_two_mut(t_id, ot_id, t, ot);
 
         let (t, ot, t_n1, t_n2, t_n3, t_n4) =
             unsafe { triangles.get_mut_six(t_id, ot_id, n1, n2, n3, n4) };
 
         if let Some(t_n2) = t_n2 {
-            Triangles::mark_neighbor_for_two_mut(t_id, n2, t, t_n2);
+            TriangleStore::mark_neighbor_for_two_mut(t_id, n2, t, t_n2);
         }
         if let Some(t_n3) = t_n3 {
-            Triangles::mark_neighbor_for_two_mut(t_id, n3, t, t_n3);
+            TriangleStore::mark_neighbor_for_two_mut(t_id, n3, t, t_n3);
         }
         if let Some(t_n1) = t_n1 {
-            Triangles::mark_neighbor_for_two_mut(ot_id, n1, ot, t_n1);
+            TriangleStore::mark_neighbor_for_two_mut(ot_id, n1, ot, t_n1);
         }
         if let Some(t_n4) = t_n4 {
-            Triangles::mark_neighbor_for_two_mut(ot_id, n4, ot, t_n4);
+            TriangleStore::mark_neighbor_for_two_mut(ot_id, n4, ot, t_n4);
         }
 
         n1.invalid() || n2.invalid() || n3.invalid() || n4.invalid()
@@ -1429,7 +1425,7 @@ impl Sweeper {
     }
 }
 
-fn parse_polyline(polyline: Vec<Point>, points: &mut Points) -> Vec<Edge> {
+fn parse_polyline(polyline: Vec<Point>, points: &mut PointsBuilder) -> Vec<Edge> {
     let mut edge_list = Vec::with_capacity(polyline.len());
 
     let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
@@ -1470,7 +1466,8 @@ mod tests {
         let points = try_load_from_file(file_path).unwrap();
 
         let sweeper = SweeperBuilder::new(points).build();
-        sweeper.triangulate();
+        let triangles = sweeper.triangulate().collect::<Vec<_>>();
+        assert_eq!(triangles.len(), 273);
     }
 
     #[test]
@@ -1504,7 +1501,7 @@ mod tests {
             Point::new(400., 600.),
         ])
         .build();
-        sweeper.triangulate();
+        let _ = sweeper.triangulate();
 
         delete_file(test_path);
     }
@@ -1546,18 +1543,5 @@ mod tests {
 
     fn delete_file(path: &str) {
         std::fs::remove_file(path).unwrap();
-    }
-
-    fn attach_debugger() {
-        let url = format!(
-            "vscode://vadimcn.vscode-lldb/launch/config?{{'request':'attach','pid':{}}}",
-            std::process::id()
-        );
-        std::process::Command::new("code")
-            .arg("--open-url")
-            .arg(url)
-            .output()
-            .unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(1)); // Wait for debugger to attach
     }
 }

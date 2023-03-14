@@ -46,7 +46,7 @@ fn test_rand() {
     ])
     .build();
 
-    sweeper.triangulate();
+    let _ = sweeper.triangulate();
     delete_file(file_path);
 }
 
