@@ -60,6 +60,7 @@ impl Observer for () {}
 ///    let sweeper = builder.build();
 /// ```
 
+#[derive(Clone)]
 pub struct SweeperBuilder {
     points_builder: PointsBuilder,
     edges_builder: EdgesBuilder,

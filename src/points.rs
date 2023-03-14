@@ -18,7 +18,7 @@ impl PointId {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PointsBuilder {
     points: Vec<Point>,
 }

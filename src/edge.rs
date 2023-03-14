@@ -1,6 +1,7 @@
 use crate::{Edge, PointId};
 
 /// Builder for `Edges`
+#[derive(Clone)]
 pub struct EdgesBuilder {
     edges_list: Vec<Vec<Edge>>,
 }

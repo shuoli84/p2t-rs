@@ -14,13 +14,10 @@ struct Args {
     path: Option<std::path::PathBuf>,
 
     #[arg(long)]
-    detail: bool,
+    point: bool,
 
-    #[arg(long, default_value = "true")]
-    result: bool,
-
-    #[arg(long, default_value = "1")]
-    count: usize,
+    #[arg(long)]
+    edge: bool,
 
     #[arg(long, default_value = "false")]
     test: bool,
@@ -50,7 +47,7 @@ fn try_load_from_file(path: &std::path::PathBuf) -> Option<Vec<Point>> {
 fn main() {
     let args = Args::parse();
 
-    let sweeper = if args.test {
+    let sweeper_builder = if args.test {
         let points = if let Some(path) = args.path.as_ref() {
             try_load_from_file(path).unwrap()
         } else {
@@ -76,7 +73,6 @@ fn main() {
             Point::new(600., 600.),
             Point::new(400., 600.),
         ])
-        .build()
     } else {
         let mut file_loader = PlainFileLoader::default();
         file_loader
@@ -84,136 +80,121 @@ fn main() {
             .unwrap()
     };
 
-    for _i in 0..args.count {
-        let _result = sweeper
-            .clone()
-            .triangulate_with_observer(&mut DrawObserver::new(&args));
-    }
+    let mut observer = DrawObserver::new(&args);
+    let _result = sweeper_builder
+        .clone()
+        .build()
+        .triangulate_with_observer(&mut observer);
+
+    // we measure time with dummy observer
+    let start = std::time::Instant::now();
+    let _ = sweeper_builder.build().triangulate();
+    let end = std::time::Instant::now();
+    let duration = end.duration_since(start);
+    println!("{:?} elapsed", duration);
+    observer.save();
 }
 
 struct DrawObserver {
     messages: Vec<String>,
-    // whether show debug info, like point_id, locations, triangle, messages
     debug: bool,
-    detail: bool,
-    result: bool,
-    inspect_id: Option<usize>,
+    // whether show debug info, like point_id, locations, triangle, messages
+    point: bool,
+    edge: bool,
+
     legalizing: Option<TriangleId>,
-    prev_detail: bool,
-    draw_options: DrawOptions,
-}
 
-struct DrawOptions {
-    // whether draw all triangles
-    draw_triangles: bool,
-    // whether draw result
-    draw_result: bool,
-}
+    // whether all process done
+    finalized: bool,
 
-impl Default for DrawOptions {
-    fn default() -> Self {
-        Self {
-            draw_result: true,
-            draw_triangles: true,
-        }
-    }
+    /// svgs
+    frames: Vec<String>,
+    frame_messages: Vec<Vec<String>>,
 }
 
 impl DrawObserver {
     fn new(args: &Args) -> Self {
         Self {
             debug: args.debug,
-            detail: args.detail,
-            result: args.result,
+            point: args.point,
+            edge: args.edge,
             messages: Default::default(),
-            inspect_id: Default::default(),
             legalizing: Default::default(),
-            prev_detail: Default::default(),
-            draw_options: DrawOptions::default(),
+            finalized: false,
+            frames: vec![],
+            frame_messages: vec![],
         }
+    }
+
+    fn save(&self) {
+        use askama::Template;
+
+        #[derive(Template)] // this will generate the code...
+        #[template(path = "draw_template.html")] // using the template in this path, relative
+                                                 // to the `templates` dir in the crate root
+
+        struct DrawTemplate<'a> {
+            // the name of the struct can be anything
+            frames: &'a [String],
+            frame_messages: &'a [Vec<String>],
+        }
+
+        let html_content = DrawTemplate {
+            frames: self.frames.as_slice(),
+            frame_messages: &self.frame_messages,
+        }
+        .render()
+        .unwrap();
+
+        std::fs::write("draw.html", html_content).unwrap();
     }
 }
 
 impl Observer for DrawObserver {
     fn point_event(&mut self, point_id: poly2tri_rs::PointId, context: &Context) {
-        if self.detail {
-            let point = context.points.get_point(point_id).unwrap();
-            self.messages
-                .push(format!("point event: {point_id:?} {point:?}"));
-            self.draw(context);
+        if !self.point {
+            return;
         }
+        let point = context.points.get_point(point_id).unwrap();
+        self.messages
+            .push(format!("point event: {point_id:?} {point:?}"));
+        self.draw(context);
     }
 
     fn edge_event(&mut self, edge: Edge, context: &Context) {
-        if self.detail {
-            self.messages.push(format!(
-                "edge_event: p:{} q:{}",
-                edge.p.as_usize(),
-                edge.q.as_usize(),
-            ));
-
-            self.draw(context);
+        if !self.edge {
+            return;
         }
+        self.messages.push(format!(
+            "edge_event: p:{} q:{}",
+            edge.p.as_usize(),
+            edge.q.as_usize(),
+        ));
+
+        self.draw(context);
     }
 
-    fn will_legalize(&mut self, triangle_id: TriangleId, context: &Context) {
+    fn will_legalize(&mut self, triangle_id: TriangleId, _context: &Context) {
         self.legalizing = Some(triangle_id);
-        if self
-            .inspect_id
-            .map(|i| i == triangle_id.as_usize())
-            .unwrap_or_default()
-        {
-            self.prev_detail = self.detail;
-            self.detail = true;
-        }
-
-        if self.detail && self.inspect_id.is_some() {
-            self.messages.push(format!(
-                "will legalize triangle: {}",
-                triangle_id.as_usize()
-            ));
-            self.draw(context);
-        }
     }
 
-    fn legalize_step(&mut self, triangle_id: TriangleId, context: &Context) {
-        if self.detail && self.inspect_id.is_some() {
-            self.messages.push(format!(
-                "leaglize step for t:{} this t:{}",
-                self.legalizing.unwrap().as_usize(),
-                triangle_id.as_usize()
-            ));
-            self.draw(context);
-        }
+    fn legalize_step(&mut self, _triangle_id: TriangleId, _context: &Context) {
+        // do nothing for now
     }
 
-    fn legalized(&mut self, triangle_id: TriangleId, context: &Context) {
-        if self.detail {
-            self.messages
-                .push(format!("leaglized triangle: {}", triangle_id.as_usize()));
-            self.draw(context);
-        }
-
-        if let Some(id) = self.inspect_id {
-            if id == triangle_id.as_usize() {
-                self.detail = self.prev_detail;
-            }
-        }
+    fn legalized(&mut self, _triangle_id: TriangleId, _context: &Context) {
         self.legalizing = None;
     }
 
     fn sweep_done(&mut self, context: &Context) {
-        if self.detail {
-            self.messages.push("sweep done".into());
-            self.draw(context);
-        }
+        self.messages.push("sweep done".into());
+        self.draw(context);
     }
 
     fn finalized(&mut self, context: &Context) {
-        if self.result {
-            self.messages.push("finalized".into());
-            self.draw(context);
-        }
+        self.messages.push("finalized".into());
+        self.finalized = true;
+        self.draw(context);
     }
 }
 
@@ -256,40 +237,58 @@ impl DrawObserver {
             max_y = max_y.max(p.y);
         }
 
+        let w = max_x - min_x;
+        let space = w * 0.05; // give some space
+
         let from = MapRect {
-            x: min_x - 30.,
-            y: min_y - 30.,
-            w: max_x - min_x + 60.,
-            h: max_y - min_y + 60.,
+            x: min_x - space,
+            y: min_y - space,
+            w: max_x - min_x + 2. * space,
+            h: max_y - min_y + 2. * space,
         };
-        let map = Map { from, to: from };
+
+        let to = if from.w <= 100. {
+            MapRect {
+                x: 0.,
+                y: 0.,
+                w: 800.,
+                h: 800.,
+            }
+        } else {
+            from
+        };
+        let map = Map { from, to };
 
         let mut doc = Document::new()
-            .set("viewBox", (from.x, from.y, from.w, from.h))
+            .set("viewBox", (to.x, to.y, to.w, to.h))
             .set("style", "background-color: #F5F5F5");
 
-        for (id, point) in context.points.iter() {
-            let (x, y) = map.map_point(point.x, point.y);
+        if !self.finalized {
+            let point_r = from.w / 200.;
 
-            if self.debug {
-                doc.append(text(
-                    format!("({}) ({:.2}, {:.2})", id.as_usize(), point.x, point.y),
-                    (x, y),
-                ));
+            for (id, point) in context.points.iter() {
+                let (x, y) = map.map_point(point.x, point.y);
+
+                if self.debug {
+                    doc.append(text(
+                        format!("({}) ({:.2}, {:.2})", id.as_usize(), point.x, point.y),
+                        (x, y),
+                    ));
+                }
+
+                if self.point {
+                    doc.append(circle((x, y), point_r, "red", "clear"));
+                }
+
+                for p_id in context.edges.p_for_q(id) {
+                    let p_point = context.points.get_point(*p_id).unwrap();
+                    let p = map.map_point(p_point.x, p_point.y);
+                    let q = map.map_point(point.x, point.y);
+
+                    doc.append(line(p, q, "black"));
+                }
             }
 
-            doc.append(circle((x, y), 3., "red", "clear"));
-
-            for p_id in context.edges.p_for_q(id) {
-                let p_point = context.points.get_point(*p_id).unwrap();
-                let p = map.map_point(p_point.x, p_point.y);
-                let q = map.map_point(point.x, point.y);
-
-                doc.append(line(p, q, "black"));
-            }
-        }
-
-        if self.draw_options.draw_triangles {
             for (id, t) in context.triangles.iter() {
                 let p0 = context.points.get_point(t.points[0]).unwrap();
                 let p1 = context.points.get_point(t.points[1]).unwrap();
@@ -345,54 +344,58 @@ impl DrawObserver {
                     ));
                 }
             }
-        }
 
-        if self.debug {
-            for (_p, n) in context.advancing_front.iter() {
-                if let Some(t) = n.triangle {
-                    let t = context.triangles.get(t).unwrap();
+            if self.debug {
+                for (_p, n) in context.advancing_front.iter() {
+                    if let Some(t) = n.triangle {
+                        let t = context.triangles.get(t).unwrap();
 
-                    let p0 = context.points.get_point(t.points[0]).unwrap();
-                    let p1 = context.points.get_point(t.points[1]).unwrap();
-                    let p2 = context.points.get_point(t.points[2]).unwrap();
+                        let p0 = context.points.get_point(t.points[0]).unwrap();
+                        let p1 = context.points.get_point(t.points[1]).unwrap();
+                        let p2 = context.points.get_point(t.points[2]).unwrap();
 
-                    let p0 = map.map_point(p0.x, p0.y);
-                    let p1 = map.map_point(p1.x, p1.y);
-                    let p2 = map.map_point(p2.x, p2.y);
+                        let p0 = map.map_point(p0.x, p0.y);
+                        let p1 = map.map_point(p1.x, p1.y);
+                        let p2 = map.map_point(p2.x, p2.y);
 
-                    doc.append(line(p0, p1, "red"));
-                    doc.append(line(p1, p2, "red"));
-                    doc.append(line(p2, p0, "red"));
+                        doc.append(line(p0, p1, "red"));
+                        doc.append(line(p1, p2, "red"));
+                        doc.append(line(p2, p0, "red"));
+                    }
                 }
             }
         }
 
-        if self.draw_options.draw_result {
-            for t in &context.result {
-                let t = context.triangles.get(*t).unwrap();
+        let border_color = if context.result.iter().any(|t| {
+            let t = context.triangles.get(*t).unwrap();
 
-                let p0 = context.points.get_point(t.points[0]).unwrap();
-                let p1 = context.points.get_point(t.points[1]).unwrap();
-                let p2 = context.points.get_point(t.points[2]).unwrap();
+            let p0 = context.points.get_point(t.points[0]).unwrap();
+            let p1 = context.points.get_point(t.points[1]).unwrap();
+            let p2 = context.points.get_point(t.points[2]).unwrap();
 
-                let p0 = map.map_point(p0.x, p0.y);
-                let p1 = map.map_point(p1.x, p1.y);
-                let p2 = map.map_point(p2.x, p2.y);
+            let p0 = map.map_point(p0.x, p0.y);
+            let p1 = map.map_point(p1.x, p1.y);
+            let p2 = map.map_point(p2.x, p2.y);
 
-                doc.append(triangle(p0, p1, p2, "white", "blue"));
-            }
-        }
-
-        if self.debug {
-            let mut y = 40;
-            let mut messages = svg::node::element::Group::new();
-            for m in std::mem::take(&mut self.messages).into_iter() {
-                messages.append(text(m, (0., y as f64)));
-                y += 40;
-            }
-            doc.append(messages.set("x", 50));
+            distance(p0, p1) < 1. || distance(p0, p2) < 1. || distance(p1, p2) < 1.
+        }) {
+            "clear"
         } else {
-            self.messages.clear();
+            "white"
+        };
+
+        for t in &context.result {
+            let t = context.triangles.get(*t).unwrap();
+
+            let p0 = context.points.get_point(t.points[0]).unwrap();
+            let p1 = context.points.get_point(t.points[1]).unwrap();
+            let p2 = context.points.get_point(t.points[2]).unwrap();
+
+            let p0 = map.map_point(p0.x, p0.y);
+            let p1 = map.map_point(p1.x, p1.y);
+            let p2 = map.map_point(p2.x, p2.y);
+
+            doc.append(triangle(p0, p1, p2, border_color, "blue"));
         }
 
         let mut draw_illegal_triangle = |tid: TriangleId, fill_color: &str, border_color: &str| {
@@ -416,10 +419,8 @@ impl DrawObserver {
             draw_illegal_triangle(to_tid, "yellow", "black");
         }
 
-        static DRAW_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let draw_id = DRAW_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = format!("test_files/context_dump_{}.svg", draw_id);
-        svg::save(path, &doc).unwrap();
+        self.frames.push(doc.to_string());
+        self.frame_messages.push(std::mem::take(&mut self.messages));
     }
 }
 
@@ -452,10 +453,15 @@ fn triangle(
         .line_to(p1)
         .line_to(p2)
         .close();
+
     svg::node::element::Path::new()
         .set("d", data)
         .set("stroke", to_color(border_color))
         .set("fill", to_color(fill_color))
+}
+
+fn distance(l: (f64, f64), r: (f64, f64)) -> f64 {
+    ((r.0 - l.0) * (r.0 - l.0) + (r.1 - l.1) * (r.1 - l.1)).sqrt()
 }
 
 fn circle(
@@ -469,6 +475,7 @@ fn circle(
         .set("cy", c.1)
         .set("r", r)
         .set("stroke-color", to_color(stroke_color))
+        .set("stroke-width", 1)
         .set("fill-color", to_color(fill_color))
 }
 

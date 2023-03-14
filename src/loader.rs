@@ -1,4 +1,4 @@
-use crate::{Point, Sweeper, SweeperBuilder};
+use crate::{Point, SweeperBuilder};
 
 #[derive(thiserror::Error, Debug)]
 pub enum LoaderError {
@@ -11,7 +11,7 @@ pub enum LoaderError {
 /// Loader loads source to a [`Sweeper`].
 /// e.g: PlainFileLoader load from file path with same format defined by original 'poly2tri' project
 pub trait Loader {
-    fn load(&mut self, source: &str) -> Result<Sweeper, LoaderError>;
+    fn load(&mut self, source: &str) -> Result<SweeperBuilder, LoaderError>;
 }
 
 /// Loaders can load data from file
@@ -27,7 +27,7 @@ enum ParseState {
 }
 
 impl Loader for PlainFileLoader {
-    fn load(&mut self, path: &str) -> Result<Sweeper, LoaderError> {
+    fn load(&mut self, path: &str) -> Result<SweeperBuilder, LoaderError> {
         let mut f = std::fs::File::options().read(true).open(path)?;
         let mut value = "".to_string();
         std::io::Read::read_to_string(&mut f, &mut value).unwrap();
@@ -46,7 +46,10 @@ impl Loader for PlainFileLoader {
                 state = ParseState::Steiner;
                 continue;
             }
-            let point = parse_point(line)?;
+            let Some(point) = parse_point(line)? else {
+                continue
+            };
+
             match state {
                 ParseState::Polygon => {
                     polygon.push(point);
@@ -63,17 +66,19 @@ impl Loader for PlainFileLoader {
 
         Ok(SweeperBuilder::new(polygon)
             .add_holes(holes)
-            .add_steiner_points(steiner_points)
-            .build())
+            .add_steiner_points(steiner_points))
     }
 }
 
-fn parse_point(line: &str) -> Result<Point, LoaderError> {
+fn parse_point(line: &str) -> Result<Option<Point>, LoaderError> {
+    if line.is_empty() {
+        return Ok(None);
+    }
     let mut iter = line.split_whitespace();
     let x = iter.next().unwrap();
     let y = iter.next().unwrap();
     let x = x.parse::<f64>().unwrap();
     let y = y.parse::<f64>().unwrap();
 
-    Ok(Point::new(x, y))
+    Ok(Some(Point::new(x, y)))
 }
