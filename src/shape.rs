@@ -99,8 +99,9 @@ impl EdgeAttr {
     }
 }
 
+/// The triangle struct used internally.
 #[derive(Debug, Clone, Copy)]
-pub struct Triangle {
+pub struct InnerTriangle {
     /// triangle points
     pub points: [PointId; 3],
 
@@ -109,20 +110,17 @@ pub struct Triangle {
 
     pub edge_attrs: [EdgeAttr; 3],
 
-    pub tick: u64,
-
     /// Has this triangle been marked as an interior triangle?
     pub interior: bool,
 }
 
-impl Triangle {
+impl InnerTriangle {
     pub fn new(a: PointId, b: PointId, c: PointId) -> Self {
         Self {
             points: [a, b, c],
             edge_attrs: [Default::default(), Default::default(), Default::default()],
             neighbors: [TriangleId::INVALID; 3],
             interior: false,
-            tick: 0,
         }
     }
 
@@ -153,7 +151,7 @@ impl Triangle {
     }
 
     /// The opposite point for point in neighbor `from_triangle`
-    pub fn opposite_point(&self, from_triangle: &Triangle, point: PointId) -> PointId {
+    pub fn opposite_point(&self, from_triangle: &InnerTriangle, point: PointId) -> PointId {
         let cw = from_triangle.point_cw(point);
         self.point_cw(cw)
     }
@@ -349,7 +347,7 @@ mod tests {
         //                       | /
         //       4               4
         //
-        let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
+        let mut t = InnerTriangle::new(PointId(1), PointId(2), PointId(3));
         t.rotate_cw(PointId(1), PointId(4));
         assert_eq!(t.points, [PointId(3), PointId(1), PointId(4)]);
 
@@ -359,11 +357,11 @@ mod tests {
         //     /   \          \    \
         //    2  -  3   =>      2  - -  3
         //
-        let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
+        let mut t = InnerTriangle::new(PointId(1), PointId(2), PointId(3));
         t.rotate_cw(PointId(3), PointId(4));
         assert_eq!(t.points, [PointId(3), PointId(4), PointId(2)]);
 
-        let mut t = Triangle::new(PointId(1), PointId(2), PointId(3));
+        let mut t = InnerTriangle::new(PointId(1), PointId(2), PointId(3));
         t.rotate_cw(PointId(2), PointId(4));
         assert_eq!(t.points, [PointId(4), PointId(1), PointId(2)]);
     }

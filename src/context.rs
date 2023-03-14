@@ -1,4 +1,6 @@
-use crate::{AdvancingFront, Edges, Points, TriangleId, Triangles};
+use crate::{
+    advancing_front::AdvancingFront, edge::Edges, points::Points, triangles::Triangles, TriangleId,
+};
 
 pub struct Context<'a> {
     pub points: &'a Points,

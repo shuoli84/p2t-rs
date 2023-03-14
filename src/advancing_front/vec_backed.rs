@@ -1,5 +1,6 @@
 use super::*;
-use crate::{points::Points, shape::Point, triangles::TriangleId, PointId, Triangle};
+use crate::shape::InnerTriangle;
+use crate::{points::Points, shape::Point, triangles::TriangleId, PointId};
 
 /// Advancing front, stores all advancing edges in a btree, this makes store compact
 /// and easier to update
@@ -11,7 +12,7 @@ pub struct AdvancingFrontVec {
 impl AdvancingFrontVec {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
-    pub fn new(triangle: &Triangle, triangle_id: TriangleId, points: &Points) -> Self {
+    pub fn new(triangle: &InnerTriangle, triangle_id: TriangleId, points: &Points) -> Self {
         let mut nodes = Vec::<(PointKey, Node)>::with_capacity(32);
 
         let first_point = points

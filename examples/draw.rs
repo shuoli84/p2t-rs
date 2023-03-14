@@ -82,14 +82,16 @@ fn main() {
     };
 
     for _i in 0..args.count {
-        let _result = sweeper.clone().triangulate_with_observer(DrawObserver {
-            messages: vec![],
-            detail: args.detail,
-            result: args.result,
-            legalizing: None,
-            prev_detail: args.detail,
-            inspect_id: None,
-        });
+        let _result = sweeper
+            .clone()
+            .triangulate_with_observer(&mut DrawObserver {
+                messages: vec![],
+                detail: args.detail,
+                result: args.result,
+                legalizing: None,
+                prev_detail: args.detail,
+                inspect_id: None,
+            });
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::shape::Triangle;
+use crate::shape::InnerTriangle;
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TriangleId(usize);
@@ -11,11 +11,11 @@ impl TriangleId {
         self.0 == Self::INVALID.0
     }
 
-    pub fn get<'a, 'b>(&'a self, triangles: &'b Triangles) -> &'b Triangle {
+    pub fn get<'a, 'b>(&'a self, triangles: &'b Triangles) -> &'b InnerTriangle {
         triangles.get_unchecked(*self)
     }
 
-    pub fn try_get<'a, 'b>(&'a self, triangles: &'b Triangles) -> Option<&'b Triangle> {
+    pub fn try_get<'a, 'b>(&'a self, triangles: &'b Triangles) -> Option<&'b InnerTriangle> {
         triangles.get(*self)
     }
 
@@ -29,7 +29,7 @@ impl TriangleId {
 //       O(n).
 #[derive(Debug)]
 pub struct Triangles {
-    triangles: Vec<Triangle>,
+    triangles: Vec<InnerTriangle>,
 }
 
 impl Triangles {
@@ -44,27 +44,27 @@ impl Triangles {
     }
 
     /// insert a new triangle
-    pub fn insert(&mut self, triangle: Triangle) -> TriangleId {
+    pub fn insert(&mut self, triangle: InnerTriangle) -> TriangleId {
         let id = TriangleId(self.triangles.len());
         self.triangles.push(triangle);
         id
     }
 
-    pub fn get(&self, id: TriangleId) -> Option<&Triangle> {
+    pub fn get(&self, id: TriangleId) -> Option<&InnerTriangle> {
         if id == TriangleId::INVALID {
             return None;
         }
         unsafe { Some(self.triangles.get_unchecked(id.0)) }
     }
 
-    pub fn get_unchecked(&self, id: TriangleId) -> &Triangle {
+    pub fn get_unchecked(&self, id: TriangleId) -> &InnerTriangle {
         if id == TriangleId::INVALID {
             panic!("id should be valid");
         }
         unsafe { self.triangles.get_unchecked(id.0) }
     }
 
-    pub fn get_mut(&mut self, id: TriangleId) -> Option<&mut Triangle> {
+    pub fn get_mut(&mut self, id: TriangleId) -> Option<&mut InnerTriangle> {
         self.triangles.get_mut(id.0)
     }
 
@@ -72,10 +72,10 @@ impl Triangles {
         &mut self,
         id_0: TriangleId,
         id_1: TriangleId,
-    ) -> (&mut Triangle, &mut Triangle) {
+    ) -> (&mut InnerTriangle, &mut InnerTriangle) {
         assert!(id_0 != id_1 && id_0.0 < self.triangles.len() && id_1.0 < self.triangles.len());
 
-        let slice: *mut Triangle = self.triangles.as_mut_ptr();
+        let slice: *mut InnerTriangle = self.triangles.as_mut_ptr();
 
         // satefy: asserted that id_0 != id_1 && id_0 < len && id_1 < len
         let ref_0 = unsafe { &mut *slice.add(id_0.0) };
@@ -93,16 +93,16 @@ impl Triangles {
         id_4: TriangleId,
         id_5: TriangleId,
     ) -> (
-        &mut Triangle,
-        &mut Triangle,
-        Option<&mut Triangle>,
-        Option<&mut Triangle>,
-        Option<&mut Triangle>,
-        Option<&mut Triangle>,
+        &mut InnerTriangle,
+        &mut InnerTriangle,
+        Option<&mut InnerTriangle>,
+        Option<&mut InnerTriangle>,
+        Option<&mut InnerTriangle>,
+        Option<&mut InnerTriangle>,
     ) {
         assert!(id_0 != id_1 && id_0.0 < self.triangles.len() && id_1.0 < self.triangles.len());
 
-        let slice: *mut Triangle = self.triangles.as_mut_ptr();
+        let slice: *mut InnerTriangle = self.triangles.as_mut_ptr();
 
         // satefy: asserted that id_0 != id_1 && id_0 < len && id_1 < len
         let ref_0 = unsafe { &mut *slice.add(id_0.0) };
@@ -134,11 +134,11 @@ impl Triangles {
         (ref_0, ref_1, ref_2, ref_3, ref_4, ref_5)
     }
 
-    pub fn get_mut_unchecked(&mut self, id: TriangleId) -> &mut Triangle {
+    pub fn get_mut_unchecked(&mut self, id: TriangleId) -> &mut InnerTriangle {
         unsafe { self.triangles.get_unchecked_mut(id.0) }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (TriangleId, &Triangle)> {
+    pub fn iter(&self) -> impl Iterator<Item = (TriangleId, &InnerTriangle)> {
         self.triangles
             .iter()
             .enumerate()
@@ -156,8 +156,8 @@ impl Triangles {
     pub fn mark_neighbor_for_two_mut(
         left: TriangleId,
         right: TriangleId,
-        left_triangle: &mut Triangle,
-        right_triangle: &mut Triangle,
+        left_triangle: &mut InnerTriangle,
+        right_triangle: &mut InnerTriangle,
     ) {
         let (l_ei, r_ei) = if let Some(r_ei) =
             right_triangle.edge_index(left_triangle.points[1], left_triangle.points[2])
@@ -205,8 +205,8 @@ mod tests {
         let p2 = points.add_point(Point::new(1., 2.));
         let p3 = points.add_point(Point::new(4., 2.));
 
-        let t1 = triangles.insert(Triangle::new(p0, p1, p2));
-        let t2 = triangles.insert(Triangle::new(p1, p2, p3));
+        let t1 = triangles.insert(InnerTriangle::new(p0, p1, p2));
+        let t2 = triangles.insert(InnerTriangle::new(p1, p2, p3));
 
         triangles.mark_neighbor(t1, t2);
         {
@@ -227,8 +227,8 @@ mod tests {
         let p2 = points.add_point(Point::new(1., 2.));
         let p3 = points.add_point(Point::new(4., 2.));
 
-        let t1 = triangles.insert(Triangle::new(p0, p1, p2));
-        let t2 = triangles.insert(Triangle::new(p1, p2, p3));
+        let t1 = triangles.insert(InnerTriangle::new(p0, p1, p2));
+        let t2 = triangles.insert(InnerTriangle::new(p1, p2, p3));
 
         let (t1, t2) = unsafe { triangles.get_mut_two(t1, t2) };
         assert_eq!(t1.points, [p0, p1, p2]);

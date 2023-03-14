@@ -59,7 +59,7 @@ mod tests {
     use super::*;
     use crate::{
         points::Points,
-        shape::{Point, Triangle},
+        shape::{InnerTriangle, Point},
         triangles::Triangles,
     };
 
@@ -71,7 +71,7 @@ mod tests {
         let p_0 = points.add_point(Point::new(-1., 0.));
         let p_1 = points.add_point(Point::new(0., 3.));
         let p_2 = points.add_point(Point::new(1., 1.));
-        let triangle_id = triangles.insert(Triangle::new(p_0, p_1, p_2));
+        let triangle_id = triangles.insert(InnerTriangle::new(p_0, p_1, p_2));
         let triangle = triangles.get(triangle_id).unwrap();
 
         let mut advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
