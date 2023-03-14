@@ -13,17 +13,20 @@ struct Args {
     #[arg(short, long)]
     path: Option<std::path::PathBuf>,
 
-    #[arg(short, long)]
+    #[arg(long)]
     detail: bool,
 
-    #[arg(short, long)]
+    #[arg(long, default_value = "true")]
     result: bool,
 
-    #[arg(short, long, default_value = "1")]
+    #[arg(long, default_value = "1")]
     count: usize,
 
-    #[arg(short, long, default_value = "false")]
+    #[arg(long, default_value = "false")]
     test: bool,
+
+    #[arg(long, default_value = "false")]
+    debug: bool,
 }
 
 fn try_load_from_file(path: &std::path::PathBuf) -> Option<Vec<Point>> {
@@ -77,32 +80,58 @@ fn main() {
     } else {
         let mut file_loader = PlainFileLoader::default();
         file_loader
-            .load(args.path.unwrap().as_os_str().to_str().unwrap())
+            .load(args.path.as_ref().unwrap().as_os_str().to_str().unwrap())
             .unwrap()
     };
 
     for _i in 0..args.count {
         let _result = sweeper
             .clone()
-            .triangulate_with_observer(&mut DrawObserver {
-                messages: vec![],
-                detail: args.detail,
-                result: args.result,
-                legalizing: None,
-                prev_detail: args.detail,
-                inspect_id: None,
-            });
+            .triangulate_with_observer(&mut DrawObserver::new(&args));
     }
 }
 
-#[derive(Default)]
 struct DrawObserver {
     messages: Vec<String>,
+    // whether show debug info, like point_id, locations, triangle, messages
+    debug: bool,
     detail: bool,
     result: bool,
     inspect_id: Option<usize>,
     legalizing: Option<TriangleId>,
     prev_detail: bool,
+    draw_options: DrawOptions,
+}
+
+struct DrawOptions {
+    // whether draw all triangles
+    draw_triangles: bool,
+    // whether draw result
+    draw_result: bool,
+}
+
+impl Default for DrawOptions {
+    fn default() -> Self {
+        Self {
+            draw_result: true,
+            draw_triangles: true,
+        }
+    }
+}
+
+impl DrawObserver {
+    fn new(args: &Args) -> Self {
+        Self {
+            debug: args.debug,
+            detail: args.detail,
+            result: args.result,
+            messages: Default::default(),
+            inspect_id: Default::default(),
+            legalizing: Default::default(),
+            prev_detail: Default::default(),
+            draw_options: DrawOptions::default(),
+        }
+    }
 }
 
 impl Observer for DrawObserver {
@@ -190,26 +219,10 @@ impl Observer for DrawObserver {
 
 impl DrawObserver {
     fn draw(&mut self, context: &Context) {
-        use image::{Rgb, RgbImage};
-        use imageproc::drawing::*;
-        use imageproc::point::Point;
-        use rusttype::Font;
-        use rusttype::Scale;
+        use svg::Document;
+        use svg::Node;
 
-        let red = Rgb([255u8, 0u8, 0u8]);
-        let blue = Rgb([0u8, 0u8, 255u8]);
-        let black = Rgb([0u8, 0, 0]);
-        let gray = Rgb([180u8, 180, 180]);
-        let yellow = Rgb([255u8, 255, 0]);
-
-        // 1600 picture, 800 messages
-        let mut image = RgbImage::new(2400, 1600);
-        image.fill(255);
-
-        let font = Vec::from(include_bytes!("../test_files/DejaVuSans.ttf") as &[u8]);
-        let font = Font::try_from_vec(font).unwrap();
-
-        #[derive(Debug)]
+        #[derive(Debug, Clone, Copy)]
         struct MapRect {
             x: f64,
             y: f64,
@@ -217,6 +230,7 @@ impl DrawObserver {
             h: f64,
         }
 
+        // map rect with y flipped, svg's coordinate with origin at left-top
         #[derive(Debug)]
         struct Map {
             from: MapRect,
@@ -228,16 +242,6 @@ impl DrawObserver {
                 let x = (x - self.from.x) / self.from.w * self.to.w + self.to.x;
                 let y = self.to.h - (y - self.from.y) / self.from.h * self.to.h + self.to.y;
                 (x, y)
-            }
-
-            fn map_point_i32(&self, x: f64, y: f64) -> (i32, i32) {
-                let (x, y) = self.map_point(x, y);
-                (x as i32, y as i32)
-            }
-
-            fn map_point_f32(&self, x: f64, y: f64) -> (f32, f32) {
-                let (x, y) = self.map_point(x, y);
-                (x as f32, y as f32)
             }
         }
 
@@ -252,198 +256,231 @@ impl DrawObserver {
             max_y = max_y.max(p.y);
         }
 
-        let map = Map {
-            from: MapRect {
-                x: min_x - 30.,
-                y: min_y - 30.,
-                w: max_x - min_x + 60.,
-                h: max_y - min_y + 60.,
-            },
-            to: MapRect {
-                x: 0.,
-                y: 0.,
-                w: 1600.,
-                h: 1600.,
-            },
+        let from = MapRect {
+            x: min_x - 30.,
+            y: min_y - 30.,
+            w: max_x - min_x + 60.,
+            h: max_y - min_y + 60.,
         };
+        let map = Map { from, to: from };
 
-        let point_size = 10.;
+        let mut doc = Document::new()
+            .set("viewBox", (from.x, from.y, from.w, from.h))
+            .set("style", "background-color: #F5F5F5");
 
         for (id, point) in context.points.iter() {
-            let (x, y) = map.map_point(point.x - point_size / 2., point.y + point_size / 2.);
+            let (x, y) = map.map_point(point.x, point.y);
 
-            draw_text_mut(
-                &mut image,
-                red,
-                x as i32,
-                y as i32,
-                Scale::uniform(10.),
-                &font,
-                &format!("({}) ({:.2}, {:.2})", id.as_usize(), point.x, point.y),
-            );
+            if self.debug {
+                doc.append(text(
+                    format!("({}) ({:.2}, {:.2})", id.as_usize(), point.x, point.y),
+                    (x, y),
+                ));
+            }
+
+            doc.append(circle((x, y), 3., "red", "clear"));
 
             for p_id in context.edges.p_for_q(id) {
                 let p_point = context.points.get_point(*p_id).unwrap();
-                let p = map.map_point_f32(p_point.x, p_point.y);
-                let q = map.map_point_f32(point.x, point.y);
-                draw_line_segment_mut(&mut image, p, q, yellow);
+                let p = map.map_point(p_point.x, p_point.y);
+                let q = map.map_point(point.x, point.y);
+
+                doc.append(line(p, q, "black"));
             }
         }
 
-        for (id, t) in context.triangles.iter() {
-            let p0 = context.points.get_point(t.points[0]).unwrap();
-            let p1 = context.points.get_point(t.points[1]).unwrap();
-            let p2 = context.points.get_point(t.points[2]).unwrap();
+        if self.draw_options.draw_triangles {
+            for (id, t) in context.triangles.iter() {
+                let p0 = context.points.get_point(t.points[0]).unwrap();
+                let p1 = context.points.get_point(t.points[1]).unwrap();
+                let p2 = context.points.get_point(t.points[2]).unwrap();
 
-            let p0 = map.map_point_f32(p0.x, p0.y);
-            let p1 = map.map_point_f32(p1.x, p1.y);
-            let p2 = map.map_point_f32(p2.x, p2.y);
-            let center = ((p0.0 + p1.0 + p2.0) / 3., (p0.1 + p1.1 + p2.1) / 3.);
+                let p0 = map.map_point(p0.x, p0.y);
+                let p1 = map.map_point(p1.x, p1.y);
+                let p2 = map.map_point(p2.x, p2.y);
 
-            let point_percent = 0.5;
-            let center_percent = 1. - point_percent;
+                doc.append(triangle(p0, p1, p2, "blue", "clear"));
 
-            let p0_drifted = (
-                center.0 * center_percent + p0.0 * point_percent,
-                center.1 * center_percent + p0.1 * point_percent,
-            );
-            let p1_drifted = (
-                center.0 * center_percent + p1.0 * point_percent,
-                center.1 * center_percent + p1.1 * point_percent,
-            );
-            let p2_drifted = (
-                center.0 * center_percent + p2.0 * point_percent,
-                center.1 * center_percent + p2.1 * point_percent,
-            );
+                let center = ((p0.0 + p1.0 + p2.0) / 3., (p0.1 + p1.1 + p2.1) / 3.);
 
-            let color_for_idx = |idx: usize| {
-                let color = if t.is_constrained(idx) { yellow } else { gray };
-                let color = if t.neighbors[idx].invalid() {
-                    red
-                } else {
-                    color
-                };
-                let color = if t.is_delaunay(idx) { black } else { color };
-                color
-            };
+                let point_percent = 0.5;
+                let center_percent = 1. - point_percent;
 
-            draw_line_segment_mut(&mut image, p0_drifted, p1_drifted, color_for_idx(2));
-            draw_line_segment_mut(&mut image, p1_drifted, p2_drifted, color_for_idx(0));
-            draw_line_segment_mut(&mut image, p2_drifted, p0_drifted, color_for_idx(1));
+                if self.debug {
+                    let p0_drifted = (
+                        center.0 * center_percent + p0.0 * point_percent,
+                        center.1 * center_percent + p0.1 * point_percent,
+                    );
+                    let p1_drifted = (
+                        center.0 * center_percent + p1.0 * point_percent,
+                        center.1 * center_percent + p1.1 * point_percent,
+                    );
+                    let p2_drifted = (
+                        center.0 * center_percent + p2.0 * point_percent,
+                        center.1 * center_percent + p2.1 * point_percent,
+                    );
 
-            draw_line_segment_mut(&mut image, p0, p1, blue);
-            draw_line_segment_mut(&mut image, p1, p2, blue);
-            draw_line_segment_mut(&mut image, p2, p0, blue);
+                    let color_for_idx = |idx: usize| {
+                        let color = if t.is_constrained(idx) {
+                            "yellow"
+                        } else {
+                            "gray"
+                        };
+                        let color = if t.neighbors[idx].invalid() {
+                            "red"
+                        } else {
+                            color
+                        };
+                        let color = if t.is_delaunay(idx) { "black" } else { color };
+                        color
+                    };
 
-            draw_text_mut(
-                &mut image,
-                black,
-                ((p0.0 + p1.0 + p2.0) / 3.) as i32,
-                ((p0.1 + p1.1 + p2.1) / 3.) as i32,
-                Scale::uniform(10.),
-                &font,
-                format!("{}", id.as_usize()).as_str(),
-            );
+                    doc.append(line(p0_drifted, p1_drifted, color_for_idx(2)));
+                    doc.append(line(p1_drifted, p2_drifted, color_for_idx(0)));
+                    doc.append(line(p2_drifted, p0_drifted, color_for_idx(1)));
+
+                    doc.append(text(
+                        format!("{}", id.as_usize()),
+                        ((p0.0 + p1.0 + p2.0) / 3., (p0.1 + p1.1 + p2.1) / 3.),
+                    ));
+                }
+            }
         }
 
-        for (_p, n) in context.advancing_front.iter() {
-            if let Some(t) = n.triangle {
-                let t = context.triangles.get(t).unwrap();
+        if self.debug {
+            for (_p, n) in context.advancing_front.iter() {
+                if let Some(t) = n.triangle {
+                    let t = context.triangles.get(t).unwrap();
+
+                    let p0 = context.points.get_point(t.points[0]).unwrap();
+                    let p1 = context.points.get_point(t.points[1]).unwrap();
+                    let p2 = context.points.get_point(t.points[2]).unwrap();
+
+                    let p0 = map.map_point(p0.x, p0.y);
+                    let p1 = map.map_point(p1.x, p1.y);
+                    let p2 = map.map_point(p2.x, p2.y);
+
+                    doc.append(line(p0, p1, "red"));
+                    doc.append(line(p1, p2, "red"));
+                    doc.append(line(p2, p0, "red"));
+                }
+            }
+        }
+
+        if self.draw_options.draw_result {
+            for t in &context.result {
+                let t = context.triangles.get(*t).unwrap();
 
                 let p0 = context.points.get_point(t.points[0]).unwrap();
                 let p1 = context.points.get_point(t.points[1]).unwrap();
                 let p2 = context.points.get_point(t.points[2]).unwrap();
 
-                let p0 = map.map_point_f32(p0.x, p0.y);
-                let p1 = map.map_point_f32(p1.x, p1.y);
-                let p2 = map.map_point_f32(p2.x, p2.y);
+                let p0 = map.map_point(p0.x, p0.y);
+                let p1 = map.map_point(p1.x, p1.y);
+                let p2 = map.map_point(p2.x, p2.y);
 
-                draw_line_segment_mut(&mut image, p0, p1, red);
-                draw_line_segment_mut(&mut image, p1, p2, red);
-                draw_line_segment_mut(&mut image, p2, p0, red);
+                doc.append(triangle(p0, p1, p2, "white", "blue"));
             }
         }
 
-        for t in &context.result {
-            let t = context.triangles.get(*t).unwrap();
-
-            let p0 = context.points.get_point(t.points[0]).unwrap();
-            let p1 = context.points.get_point(t.points[1]).unwrap();
-            let p2 = context.points.get_point(t.points[2]).unwrap();
-
-            {
-                let p0 = map.map_point_i32(p0.x, p0.y);
-                let p1 = map.map_point_i32(p1.x, p1.y);
-                let p2 = map.map_point_i32(p2.x, p2.y);
-
-                draw_polygon_mut(
-                    &mut image,
-                    &[
-                        Point::new(p0.0, p0.1),
-                        Point::new(p1.0, p1.1),
-                        Point::new(p2.0, p2.1),
-                    ],
-                    blue,
-                );
+        if self.debug {
+            let mut y = 40;
+            let mut messages = svg::node::element::Group::new();
+            for m in std::mem::take(&mut self.messages).into_iter() {
+                messages.append(text(m, (0., y as f64)));
+                y += 40;
             }
-            {
-                let p0 = map.map_point_f32(p0.x, p0.y);
-                let p1 = map.map_point_f32(p1.x, p1.y);
-                let p2 = map.map_point_f32(p2.x, p2.y);
-
-                draw_line_segment_mut(&mut image, p0, p1, red);
-                draw_line_segment_mut(&mut image, p1, p2, red);
-                draw_line_segment_mut(&mut image, p2, p0, red);
-            }
+            doc.append(messages.set("x", 50));
+        } else {
+            self.messages.clear();
         }
 
-        let mut y = 40;
-        for m in std::mem::take(&mut self.messages).into_iter() {
-            draw_text_mut(&mut image, black, 1600, y, Scale::uniform(20.), &font, &m);
-            y += 40;
-        }
-
-        let mut draw_triangle = |tid: TriangleId, fill_color: Rgb<u8>, border_color: Rgb<u8>| {
+        let mut draw_illegal_triangle = |tid: TriangleId, fill_color: &str, border_color: &str| {
             let t = tid.get(&context.triangles);
             let p0 = context.points.get_point(t.points[0]).unwrap();
             let p1 = context.points.get_point(t.points[1]).unwrap();
             let p2 = context.points.get_point(t.points[2]).unwrap();
 
             {
-                let p0 = map.map_point_i32(p0.x, p0.y);
-                let p1 = map.map_point_i32(p1.x, p1.y);
-                let p2 = map.map_point_i32(p2.x, p2.y);
+                let p0 = map.map_point(p0.x, p0.y);
+                let p1 = map.map_point(p1.x, p1.y);
+                let p2 = map.map_point(p2.x, p2.y);
 
-                draw_polygon_mut(
-                    &mut image,
-                    &[
-                        Point::new(p0.0, p0.1),
-                        Point::new(p1.0, p1.1),
-                        Point::new(p2.0, p2.1),
-                    ],
-                    fill_color,
-                );
-            }
-            {
-                let p0 = map.map_point_f32(p0.x, p0.y);
-                let p1 = map.map_point_f32(p1.x, p1.y);
-                let p2 = map.map_point_f32(p2.x, p2.y);
-
-                draw_line_segment_mut(&mut image, p0, p1, border_color);
-                draw_line_segment_mut(&mut image, p1, p2, border_color);
-                draw_line_segment_mut(&mut image, p2, p0, border_color);
+                doc.append(triangle(p0, p1, p2, fill_color, border_color));
             }
         };
 
         let illegal_pairs = Sweeper::illegal_triangles(context);
         for (from_tid, to_tid) in illegal_pairs {
-            draw_triangle(from_tid, red, black);
-            draw_triangle(to_tid, yellow, black);
+            draw_illegal_triangle(from_tid, "red", "black");
+            draw_illegal_triangle(to_tid, "yellow", "black");
         }
 
         static DRAW_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let draw_id = DRAW_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = format!("test_files/context_dump_{}.png", draw_id);
-        image.save(&path).unwrap();
+        let path = format!("test_files/context_dump_{}.svg", draw_id);
+        svg::save(path, &doc).unwrap();
     }
+}
+
+fn line(p: (f64, f64), q: (f64, f64), color: &str) -> svg::node::element::Line {
+    svg::node::element::Line::new()
+        .set("class", "edge")
+        .set("stroke", to_color(color))
+        .set("x1", p.0)
+        .set("y1", p.1)
+        .set("x2", q.0)
+        .set("y2", q.1)
+}
+
+fn text(content: impl Into<String>, p: (f64, f64)) -> svg::node::element::Text {
+    svg::node::element::Text::new()
+        .add(svg::node::Text::new(content))
+        .set("x", p.0)
+        .set("y", p.1)
+}
+
+fn triangle(
+    p0: (f64, f64),
+    p1: (f64, f64),
+    p2: (f64, f64),
+    border_color: &str,
+    fill_color: &str,
+) -> svg::node::element::Path {
+    let data = svg::node::element::path::Data::new()
+        .move_to(p0)
+        .line_to(p1)
+        .line_to(p2)
+        .close();
+    svg::node::element::Path::new()
+        .set("d", data)
+        .set("stroke", to_color(border_color))
+        .set("fill", to_color(fill_color))
+}
+
+fn circle(
+    c: (f64, f64),
+    r: f64,
+    stroke_color: &str,
+    fill_color: &str,
+) -> svg::node::element::Circle {
+    svg::node::element::Circle::new()
+        .set("cx", c.0)
+        .set("cy", c.1)
+        .set("r", r)
+        .set("stroke-color", to_color(stroke_color))
+        .set("fill-color", to_color(fill_color))
+}
+
+fn to_color(name: &str) -> String {
+    match name {
+        "blue" => "#29B6F6",
+        "yellow" => "#FFA726",
+        "red" => "#EF5350",
+        "black" => "#3E2723",
+        "gray" => "#616161",
+        "clear" => "#00000000",
+        _ => name,
+    }
+    .into()
 }
