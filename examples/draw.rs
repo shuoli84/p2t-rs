@@ -358,8 +358,8 @@ impl DrawObserver {
             }
 
             if self.debug {
-                for (_p, n) in context.advancing_front.iter() {
-                    if let Some(t) = n.triangle {
+                for node in context.advancing_front.iter() {
+                    if let Some(t) = node.triangle {
                         let t = context.triangles.get(t).unwrap();
 
                         let p0 = context.points.get_point(t.points[0]).unwrap();
