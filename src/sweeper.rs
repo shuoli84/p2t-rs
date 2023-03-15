@@ -581,21 +581,19 @@ impl Sweeper {
             // fill left holes
             let mut node_point = node_point;
 
-            while let Some((prev_node_point, prev_node)) =
-                context.advancing_front.locate_prev_node(node_point)
-            {
+            while let Some(prev_node) = context.advancing_front.locate_prev_node(node_point) {
                 if context.advancing_front.prev_node(&prev_node).is_some() {
                     // if HoleAngle exceeds 90 degrees then break
                     if Self::large_hole_dont_fill(
-                        prev_node_point,
+                        prev_node.point(),
                         &prev_node,
                         &context.advancing_front,
                     ) {
                         break;
                     }
 
-                    Self::fill_one(prev_node_point, context, observer);
-                    node_point = prev_node_point;
+                    node_point = prev_node.point();
+                    Self::fill_one(prev_node.point(), context, observer);
                 } else {
                     break;
                 }
@@ -883,17 +881,16 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        while let Some((prev_node_point, _)) = context.advancing_front.locate_prev_node(node_point)
-        {
+        while let Some(prev_node) = context.advancing_front.locate_prev_node(node_point) {
             // check if next node is below the edge
-            if prev_node_point.x <= edge.p.x {
+            if prev_node.point().x <= edge.p.x {
                 break;
             }
 
-            if orient_2d(edge.q, prev_node_point, edge.p).is_cw() {
+            if orient_2d(edge.q, prev_node.point(), edge.p).is_cw() {
                 Self::fill_left_below_edge_event(edge, node_point, context, observer);
             } else {
-                node_point = prev_node_point;
+                node_point = prev_node.point();
             }
         }
     }
@@ -905,15 +902,12 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         if node_point.x > edge.p.x {
-            let (prev_node_point, _) = context
+            let prev_node = context
                 .advancing_front
                 .locate_prev_node(node_point)
                 .unwrap();
-            let (prev_prev_node_point, _) = context
-                .advancing_front
-                .locate_prev_node(prev_node_point)
-                .unwrap();
-            if orient_2d(node_point, prev_node_point, prev_prev_node_point).is_cw() {
+            let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
+            if orient_2d(node_point, prev_node.point(), prev_prev_node.point()).is_cw() {
                 Self::fill_left_concave_edge_event(edge, node_point, context, observer);
             } else {
                 // convex
@@ -932,34 +926,28 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         // next concave or convex?
-        let (prev_node_point, _) = context
+        let prev_node = context
             .advancing_front
             .locate_prev_node(node_point)
             .unwrap();
-        let (prev_prev_node_point, _) = context
-            .advancing_front
-            .locate_prev_node(prev_node_point)
-            .unwrap();
-        let (prev_prev_prev_node_point, _) = context
-            .advancing_front
-            .locate_prev_node(prev_prev_node_point)
-            .unwrap();
+        let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
+        let prev_prev_prev_node = context.advancing_front.prev_node(&prev_prev_node).unwrap();
 
         if orient_2d(
-            prev_node_point,
-            prev_prev_node_point,
-            prev_prev_prev_node_point,
+            prev_node.point(),
+            prev_prev_node.point(),
+            prev_prev_prev_node.point(),
         )
         .is_cw()
         {
             // concave
-            Self::fill_left_concave_edge_event(edge, prev_node_point, context, observer);
+            Self::fill_left_concave_edge_event(edge, prev_node.point(), context, observer);
         } else {
             // convex
             // next above or below edge?
-            if orient_2d(edge.q, prev_prev_node_point, edge.p).is_cw() {
+            if orient_2d(edge.q, prev_prev_node.point(), edge.p).is_cw() {
                 // below
-                Self::fill_left_convex_edge_event(edge, prev_node_point, context, observer);
+                Self::fill_left_convex_edge_event(edge, prev_node.point(), context, observer);
             } else {
                 // above
             }
@@ -972,23 +960,23 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        let (prev_node_point, _) = context
+        let prev_node = context
             .advancing_front
             .locate_prev_node(node_point)
             .unwrap();
-        Self::fill_one(prev_node_point, context, observer);
+        Self::fill_one(prev_node.point(), context, observer);
 
-        let (prev_node_point, prev_node) = context
+        let prev_node = context
             .advancing_front
             .locate_prev_node(node_point)
             .unwrap();
 
         if prev_node.point_id() != edge.p_id() {
             // next above or below edge?
-            if orient_2d(edge.q, prev_node_point, edge.p).is_cw() {
+            if orient_2d(edge.q, prev_node.point(), edge.p).is_cw() {
                 // below
                 let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
-                if orient_2d(node_point, prev_node_point, prev_prev_node.point()).is_cw() {
+                if orient_2d(node_point, prev_node.point(), prev_prev_node.point()).is_cw() {
                     // next is concave
                     Self::fill_left_concave_edge_event(edge, node_point, context, observer);
                 } else {
@@ -1398,14 +1386,14 @@ impl Sweeper {
         Self::fill_one(node, context, observer);
 
         // find the next node to fill
-        let prev_point = context.advancing_front.locate_prev_node(node)?.0;
+        let prev = context.advancing_front.locate_prev_node(node)?;
         let next = context.advancing_front.locate_next_node(node)?;
 
-        if prev_point.eq(&basin.left) && next.point().eq(&basin.right) {
+        if prev.point().eq(&basin.left) && next.point().eq(&basin.right) {
             return Some(());
         }
 
-        let new_node = if prev_point.eq(&basin.left) {
+        let new_node = if prev.point().eq(&basin.left) {
             let next_next = context.advancing_front.locate_next_node(next.point())?;
             if orient_2d(node, next.point(), next_next.point()).is_cw() {
                 return None;
@@ -1413,16 +1401,16 @@ impl Sweeper {
 
             next.point()
         } else if next.point().eq(&basin.right) {
-            let prev_prev_point = context.advancing_front.locate_prev_node(prev_point)?.0;
-            if orient_2d(node, prev_point, prev_prev_point).is_ccw() {
+            let prev_prev = context.advancing_front.prev_node(&prev)?;
+            if orient_2d(node, prev.point(), prev_prev.point()).is_ccw() {
                 return None;
             }
 
-            prev_point
+            prev.point()
         } else {
             // continue with the neighbor node with lowest Y value
-            if prev_point.y < next.point().y {
-                prev_point
+            if prev.point().y < next.point().y {
+                prev.point()
             } else {
                 next.point()
             }

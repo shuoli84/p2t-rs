@@ -262,19 +262,12 @@ impl AdvancingFrontVec {
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
     #[inline(never)]
-    pub fn locate_prev_node(&self, point: Point) -> Option<(Point, Node)> {
+    pub fn locate_prev_node(&self, point: Point) -> Option<Node> {
         let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
         };
-        if idx < self.nodes.len() {
-            Some((
-                self.nodes[idx].0.point(),
-                self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()),
-            ))
-        } else {
-            None
-        }
+        Some(self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()))
     }
 
     /// Get prev node of the node identified by `point`

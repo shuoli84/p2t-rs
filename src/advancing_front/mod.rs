@@ -62,7 +62,7 @@ mod tests {
             assert_eq!(point.y, 3.0);
 
             let prev_node = advancing_front.locate_prev_node(point).unwrap();
-            assert_eq!(prev_node.0.x, -1.);
+            assert_eq!(prev_node.point().x, -1.);
 
             let next_node = advancing_front.locate_next_node(point).unwrap();
             assert_eq!(next_node.point().x, 1.);
@@ -71,7 +71,7 @@ mod tests {
                 advancing_front
                     .locate_prev_node(Point::new(-0.5, 0.))
                     .unwrap()
-                    .0
+                    .point()
                     .x,
                 -1.
             );
