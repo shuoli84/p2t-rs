@@ -75,10 +75,10 @@ impl EdgeAttr {
     const ALL: u8 = 0xFF;
 
     fn set_constrained(&mut self, val: bool) {
-        if val {
-            self.0 |= Self::CONSTRAINED;
-        } else {
+        if !val {
             self.0 &= Self::CONSTRAINED_UNSET;
+        } else {
+            self.0 |= Self::CONSTRAINED;
         }
     }
 
@@ -87,10 +87,10 @@ impl EdgeAttr {
     }
 
     fn set_delaunay(&mut self, val: bool) {
-        if val {
-            self.0 |= Self::DELAUNAY;
-        } else {
+        if !val {
             self.0 &= Self::DELAUNAY_UNSET;
+        } else {
+            self.0 |= Self::DELAUNAY;
         }
     }
 
