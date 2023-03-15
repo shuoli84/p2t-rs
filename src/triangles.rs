@@ -192,7 +192,7 @@ mod tests {
         let p3 = points.add_point(Point::new(4., 2.));
 
         let t1 = triangles.insert(InnerTriangle::new(p0, p1, p2));
-        let t2 = triangles.insert(InnerTriangle::new(p1, p2, p3));
+        let t2 = triangles.insert(InnerTriangle::new(p2, p1, p3));
 
         triangles.mark_neighbor(t1, t2);
         {

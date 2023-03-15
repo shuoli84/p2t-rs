@@ -137,7 +137,7 @@ impl Points {
         order: usize,
     ) -> impl Iterator<Item = (PointId, Point)> + 'a {
         self.y_sorted.iter().skip(order).map(|id| {
-            let point = self.points[id.as_usize()];
+            let point = unsafe { self.points.get_unchecked(id.as_usize()).clone() };
             (*id, point)
         })
     }

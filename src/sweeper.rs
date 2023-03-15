@@ -120,9 +120,11 @@ impl SweeperBuilder {
 
     /// build the sweeper
     pub fn build(self) -> Sweeper {
+        let points = self.points_builder.build();
+        let points_len = points.len();
         Sweeper {
-            points: self.points_builder.build(),
-            edges: self.edges_builder.build(),
+            points,
+            edges: self.edges_builder.build(points_len),
         }
     }
 }
