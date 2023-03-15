@@ -339,15 +339,81 @@ impl InnerTriangle {
     }
 
     pub fn common_edge_index(&self, other: &Self) -> Option<(usize, usize)> {
-        if let Some(r_ei) = other.edge_index(self.points[1], self.points[2]) {
-            Some((0, r_ei))
-        } else if let Some(r_ei) = other.edge_index(self.points[0], self.points[2]) {
-            Some((1, r_ei))
-        } else if let Some(r_ei) = other.edge_index(self.points[0], self.points[1]) {
-            Some((2, r_ei))
+        Some(if self.points[1] == other.points[0] {
+            if self.points[2] == other.points[2] {
+                (0, 1)
+            } else if self.points[0] == other.points[1] {
+                (2, 2)
+            } else {
+                return None;
+            }
+        } else if self.points[1] == other.points[1] {
+            if self.points[2] == other.points[0] {
+                (0, 2)
+            } else if self.points[0] == other.points[2] {
+                (2, 0)
+            } else {
+                return None;
+            }
+        } else if self.points[1] == other.points[2] {
+            if self.points[2] == other.points[1] {
+                (0, 0)
+            } else if self.points[0] == other.points[0] {
+                (2, 1)
+            } else {
+                return None;
+            }
+        } else if self.points[0] == other.points[0] {
+            if self.points[2] == other.points[1] {
+                (1, 2)
+            } else if self.points[1] == other.points[2] {
+                (2, 1)
+            } else {
+                return None;
+            }
+        } else if self.points[0] == other.points[2] {
+            if self.points[2] == other.points[0] {
+                (1, 1)
+            } else if self.points[1] == other.points[1] {
+                (2, 0)
+            } else {
+                return None;
+            }
+        } else if self.points[0] == other.points[1] {
+            if self.points[1] == other.points[0] {
+                (2, 2)
+            } else if self.points[2] == other.points[2] {
+                (1, 0)
+            } else {
+                return None;
+            }
+        } else if self.points[2] == other.points[0] {
+            if self.points[0] == other.points[2] {
+                (1, 1)
+            } else if self.points[1] == other.points[1] {
+                (0, 2)
+            } else {
+                return None;
+            }
+        } else if self.points[2] == other.points[1] {
+            if self.points[0] == other.points[0] {
+                (1, 2)
+            } else if self.points[1] == other.points[2] {
+                (0, 0)
+            } else {
+                return None;
+            }
+        } else if self.points[2] == other.points[2] {
+            if self.points[1] == other.points[0] {
+                (0, 1)
+            } else if self.points[0] == other.points[1] {
+                (1, 0)
+            } else {
+                return None;
+            }
         } else {
-            None
-        }
+            return None;
+        })
     }
 }
 
@@ -402,5 +468,46 @@ mod tests {
         assert!(attr.is_delaunay());
         attr.set_delaunay(false);
         assert!(!attr.is_delaunay());
+    }
+
+    #[test]
+    fn test_common_edge() {
+        for ((p1_0, p1_1, p1_2), (p2_0, p2_1, p2_2), common_edge) in [
+            // 0 <=> 0
+            ((0, 1, 2), (0, 4, 1), Some((2, 1))),
+            ((0, 1, 2), (0, 2, 4), Some((1, 2))),
+            // 0 <=> 1
+            ((0, 1, 2), (1, 0, 4), Some((2, 2))),
+            ((0, 1, 2), (4, 0, 2), Some((1, 0))),
+            // 0 <=> 2
+            ((0, 1, 2), (4, 1, 0), Some((2, 0))),
+            ((0, 1, 2), (2, 4, 0), Some((1, 1))),
+            // 1 <=> 0
+            ((0, 1, 2), (1, 0, 4), Some((2, 2))),
+            ((0, 1, 2), (1, 4, 2), Some((0, 1))),
+            // 1 <=> 1
+            ((0, 1, 2), (4, 2, 1), Some((0, 0))),
+            ((0, 1, 2), (2, 1, 4), Some((0, 2))),
+            // 1 <=> 2
+            ((0, 1, 2), (0, 4, 1), Some((2, 1))),
+            ((0, 1, 2), (4, 2, 1), Some((0, 0))),
+            // 2 <=> 0
+            ((0, 1, 2), (2, 1, 4), Some((0, 2))),
+            ((0, 1, 2), (2, 4, 0), Some((1, 1))),
+            // 2 <=> 1
+            ((0, 1, 2), (0, 2, 4), Some((1, 2))),
+            ((0, 1, 2), (4, 2, 1), Some((0, 0))),
+            // 2 <=> 0
+            ((0, 1, 2), (2, 4, 0), Some((1, 1))),
+            ((0, 1, 2), (2, 1, 4), Some((0, 2))),
+        ] {
+            let t = InnerTriangle::new(PointId(p1_0), PointId(p1_1), PointId(p1_2));
+            let ot = InnerTriangle::new(PointId(p2_0), PointId(p2_1), PointId(p2_2));
+            assert_eq!(
+                t.common_edge_index(&ot),
+                common_edge,
+                "({p1_0}, {p1_1}, {p1_2}) ({p2_0} {p2_1} {p2_2}) {common_edge:?}",
+            );
+        }
     }
 }
