@@ -32,20 +32,18 @@ impl Orientation {
 }
 
 pub fn orient_2d(a: Point, b: Point, c: Point) -> Orientation {
-    if !(!a.eq(&b) && !a.eq(&c) && !b.eq(&c)) {
-        assert!(false, "orient_2d point same");
-    }
+    debug_assert!(!a.eq(&b) && !a.eq(&c) && !b.eq(&c), "orient_2d point same");
 
     let detleft = (a.x - c.x) * (b.y - c.y);
     let detright = (a.y - c.y) * (b.x - c.x);
     let val = detleft - detright;
 
-    if val == 0. {
-        Orientation::Collinear
-    } else if val > 0. {
+    if val > 0. {
         Orientation::CCW
-    } else {
+    } else if val < 0. {
         Orientation::CW
+    } else {
+        Orientation::Collinear
     }
 }
 
