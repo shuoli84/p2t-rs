@@ -31,6 +31,14 @@ fn criterion_benchmark(c: &mut Criterion) {
             let _result = sweeper.triangulate();
         })
     });
+
+    c.bench_function("bench_nazca_heron", |b| {
+        let points = parse_points(include_str!("../test_data/nazca_heron.dat"));
+        b.iter(|| {
+            let sweeper = SweeperBuilder::new(points.clone()).build();
+            let _result = sweeper.triangulate();
+        })
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);

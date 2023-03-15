@@ -427,8 +427,23 @@ impl DrawObserver {
 
         let illegal_pairs = Sweeper::illegal_triangles(context);
         for (from_tid, to_tid) in illegal_pairs {
-            draw_illegal_triangle(from_tid, "red", "black");
-            draw_illegal_triangle(to_tid, "yellow", "black");
+            let from_t = from_tid.get(&context.triangles);
+            let to_t = to_tid.get(&context.triangles);
+
+            let (from_i, to_i) = from_t.common_edge_index(to_t).unwrap();
+
+            let p = from_t.points[from_i];
+            let (illegal, det) = in_circle(
+                context.points.get_point(p).unwrap(),
+                context.points.get_point(from_t.point_ccw(p)).unwrap(),
+                context.points.get_point(from_t.point_cw(p)).unwrap(),
+                context.points.get_point(to_t.points[to_i]).unwrap(),
+            );
+
+            self.messages.push(format!("illegal: {illegal} det: {det}"));
+
+            draw_illegal_triangle(from_tid, "red", "red");
+            draw_illegal_triangle(to_tid, "yellow", "red");
         }
 
         self.frames.push(doc.to_string());
@@ -502,4 +517,42 @@ fn to_color(name: &str) -> String {
         _ => name,
     }
     .into()
+}
+
+/// both check and returns the det value
+fn in_circle(pa: Point, pb: Point, pc: Point, pd: Point) -> (bool, f64) {
+    let adx = pa.x - pd.x;
+    let ady = pa.y - pd.y;
+    let bdx = pb.x - pd.x;
+    let bdy = pb.y - pd.y;
+
+    let adxbdy = adx * bdy;
+    let bdxady = bdx * ady;
+    let oabd = adxbdy - bdxady;
+
+    if oabd <= 0. {
+        return (false, 0.);
+    }
+
+    let cdx = pc.x - pd.x;
+    let cdy = pc.y - pd.y;
+
+    let cdxady = cdx * ady;
+    let adxcdy = adx * cdy;
+    let ocad = cdxady - adxcdy;
+
+    if ocad <= 0. {
+        return (false, 0.);
+    }
+
+    let bdxcdy = bdx * cdy;
+    let cdxbdy = cdx * bdy;
+
+    let alift = adx * adx + ady * ady;
+    let blift = bdx * bdx + bdy * bdy;
+    let clift = cdx * cdx + cdy * cdy;
+
+    let det = alift * (bdxcdy - cdxbdy) + blift * ocad + clift * oabd;
+
+    (det > 0., det)
 }

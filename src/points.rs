@@ -123,19 +123,15 @@ impl Points {
     }
 
     /// get point for id
+    #[inline(never)]
     pub fn get_point(&self, point_id: PointId) -> Option<Point> {
         self.points.get(point_id.0).cloned()
     }
 
     /// get point for id
+    #[inline(never)]
     pub unsafe fn get_point_uncheck(&self, point_id: PointId) -> Point {
         unsafe { self.points.get_unchecked(point_id.0).clone() }
-    }
-
-    /// get point by y order
-    pub fn get_point_by_y(&self, order: usize) -> Option<Point> {
-        let id = self.y_sorted.get(order)?;
-        Some(self.points[id.0])
     }
 
     pub fn iter_point_by_y<'a>(
@@ -160,27 +156,5 @@ impl Points {
             .iter()
             .enumerate()
             .map(|(idx, p)| (PointId(idx), p))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_points() {
-        let builder = PointsBuilder::new(vec![
-            Point::new(1., 1.),
-            Point::new(1., 2.),
-            Point::new(1., 5.),
-            Point::new(1., 3.),
-        ]);
-
-        let points = builder.build();
-
-        assert_eq!(points.get_point_by_y(0).unwrap().y, 1.);
-        assert_eq!(points.get_point_by_y(1).unwrap().y, 2.);
-        assert_eq!(points.get_point_by_y(2).unwrap().y, 3.);
-        assert_eq!(points.get_point_by_y(3).unwrap().y, 5.);
     }
 }

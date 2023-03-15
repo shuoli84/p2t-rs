@@ -277,9 +277,6 @@ impl Sweeper {
                     }
                 }
             }
-
-            #[cfg(feature = "draw_detail")]
-            context.draw();
         }
 
         Some(())
