@@ -157,6 +157,7 @@ impl InnerTriangle {
     }
 
     /// get point index
+    #[inline(always)]
     pub fn point_index(&self, point: PointId) -> Option<usize> {
         if self.points[0] == point {
             Some(0)
