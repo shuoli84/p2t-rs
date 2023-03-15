@@ -176,41 +176,14 @@ impl AdvancingFrontVec {
     /// locate the node containing point
     /// locate the node for `x`
     #[inline(never)]
-    pub fn locate_node(&self, x: f64) -> Option<(Point, Node)> {
+    pub fn locate_node(&self, x: f64) -> Option<Node> {
         let key = PointKey(Point::new(x, f64::MAX));
         let idx = match self.nodes.binary_search_by_key(&key, |e| e.0) {
             Ok(idx) => idx,
             Err(idx) => idx - 1,
         };
         let point = self.nodes[idx].0.point();
-        Some((point, self.nodes[idx].1.to_node(idx, point)))
-    }
-
-    /// locate the node containing point
-    /// locate the node for `x`
-    #[inline(never)]
-    pub fn locate_node_and_next(&self, x: f64) -> (Option<(Point, Node)>, Option<(Point, Node)>) {
-        let key = PointKey(Point::new(x, f64::MAX));
-        let idx = match self.nodes.binary_search_by_key(&key, |e| e.0) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
-        let node = Some((
-            self.nodes[idx].0.point(),
-            self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()),
-        ));
-        let next = if idx + 1 < self.nodes.len() {
-            Some((
-                self.nodes[idx + 1].0.point(),
-                self.nodes[idx + 1]
-                    .1
-                    .to_node(idx + 1, self.nodes[idx + 1].0.point()),
-            ))
-        } else {
-            None
-        };
-
-        (node, next)
+        Some(self.nodes[idx].1.to_node(idx, point))
     }
 
     /// Get the node identified by `point`

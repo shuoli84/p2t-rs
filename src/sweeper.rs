@@ -294,9 +294,9 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        let (node, next) = context.advancing_front.locate_node_and_next(point.x);
-        let (node_point, node) = node.unwrap();
-        let (_, next_node) = next.unwrap();
+        let node = context.advancing_front.locate_node(point.x).unwrap();
+        let next_node = context.advancing_front.next_node(&node).unwrap();
+        let node_point = node.point();
 
         let triangle = context.triangles.insert(InnerTriangle::new(
             point_id,
