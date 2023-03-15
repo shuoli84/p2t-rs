@@ -164,12 +164,12 @@ impl AdvancingFrontVec {
             .map(|(k, v)| (k.point(), v.to_node(n, k.point(), self)))
     }
 
-    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Point, Node)> + 'a> {
+    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = Node> + 'a> {
         Box::new(
             self.nodes
                 .iter()
                 .enumerate()
-                .map(|(idx, (p, n))| (p.point(), n.to_node(idx, p.point(), self))),
+                .map(|(idx, (p, n))| n.to_node(idx, p.point(), self)),
         )
     }
 
