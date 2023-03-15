@@ -549,13 +549,18 @@ impl Sweeper {
             .triangles
             .mark_neighbor(new_triangle, node.triangle.unwrap());
 
-        // update prev_node's triangle to newly created
-        context
-            .advancing_front
-            .insert(prev_node.point_id(), prev_node.point(), new_triangle);
-
-        // delete the node, after fill, it is covered by new triangle
-        context.advancing_front.delete(node_point);
+        // update prev_node's triangle to newly created and delete the node.
+        // node is covered by new triangle.
+        // safety: prev_node and node is valid till this point, advanceing_front can not changed
+        //       under the hood, so the index is still valid
+        unsafe {
+            context.advancing_front.update_and_delete_by_index(
+                prev_node.index(),
+                prev_node.point_id(),
+                new_triangle,
+                node.index(),
+            )
+        };
 
         Self::legalize(new_triangle, context, observer);
         Some(())
@@ -603,7 +608,7 @@ impl Sweeper {
             }
         }
 
-        // file right basins
+        // fill right basins
         if Self::basin_angle_satisfy(node_point, context) {
             Self::fill_basin(node_point, context, observer);
         }

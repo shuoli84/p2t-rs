@@ -32,6 +32,10 @@ impl NodeRef<'_> {
     pub fn prev(&self) -> Option<NodeRef> {
         self.advancing_front.prev_node(self)
     }
+
+    pub(crate) fn index(&self) -> usize {
+        self.index
+    }
 }
 
 #[cfg(test)]
@@ -91,9 +95,6 @@ mod tests {
                     .x,
                 0.
             );
-
-            advancing_front.delete(Point::new(0., 3.));
-            assert!(advancing_front.get_node(Point::new(0., 3.)).is_none());
         }
     }
 }

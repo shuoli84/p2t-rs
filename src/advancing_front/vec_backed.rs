@@ -142,24 +142,26 @@ impl AdvancingFrontVec {
         self.access_cache = Some((PointKey(point), node_index));
     }
 
-    /// delete the node identified by `point`
-    pub fn delete(&mut self, point: Point) {
-        match self.search_by_key(&PointKey(point)) {
-            Ok(idx) => {
-                self.nodes.remove(idx);
-            }
-            Err(_) => {}
-        }
+    /// insert a new node for point and triangle
+    /// or update the node pointing to new triangle
+    /// when call this method, need to ensure that index still points to the correct node
+    pub(crate) unsafe fn update_and_delete_by_index(
+        &mut self,
+        update_index: usize,
+        point_id: PointId,
+        triangle_id: TriangleId,
+        delete_index: usize,
+    ) {
+        debug_assert!(!triangle_id.invalid());
 
-        // clear cache
-        self.access_cache = None;
-    }
+        // update first, update won't modify index, so later delete is still safe
+        let node = self.nodes.get_mut(update_index).unwrap();
+        debug_assert!(node.1.point_id == point_id, "point_id mismatch");
+        node.1.triangle = Some(triangle_id);
 
-    /// delete the node identified by `point`
-    pub fn delete_node(&mut self, node: NodeRef) {
-        self.nodes.remove(node.index);
+        // then delete
+        self.nodes.remove(delete_index);
 
-        // clear cache
         self.access_cache = None;
     }
 
