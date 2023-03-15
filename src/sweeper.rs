@@ -676,7 +676,7 @@ impl Sweeper {
 
         {
             // check and fill
-            let node = context.advancing_front.get_node(q).unwrap();
+            let node = context.advancing_front.get_node_with_cache(q).unwrap();
 
             let triangle_id = node.triangle.unwrap();
             if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle_id, context) {
@@ -691,7 +691,7 @@ impl Sweeper {
         // node's triangle may changed, get the latest
         let triangle = context
             .advancing_front
-            .get_node(q)
+            .get_node_with_cache(q)
             .unwrap()
             .triangle
             .unwrap();
@@ -780,7 +780,10 @@ impl Sweeper {
             return;
         }
 
-        let node = context.advancing_front.get_node(node_point).unwrap();
+        let node = context
+            .advancing_front
+            .get_node_with_cache(node_point)
+            .unwrap();
 
         let next_node = node.next().unwrap();
         let next_next_node = next_node.next().unwrap();

@@ -203,6 +203,18 @@ impl AdvancingFrontVec {
         Some(self.nodes[index].1.to_node(index, point, self))
     }
 
+    /// Get the node identified by `point`
+    pub fn get_node_with_cache(&mut self, point: Point) -> Option<NodeRef> {
+        let index = match self.access_cache {
+            Some((p, i)) if p.0.eq(&point) => i,
+            _ => self.search_by_key(&PointKey(point)).ok()?,
+        };
+
+        // update cache
+        self.access_cache = Some((PointKey(point), index));
+        Some(self.nodes[index].1.to_node(index, point, self))
+    }
+
     /// update node's triangle
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
         if let Some((p, i)) = self.access_cache {
