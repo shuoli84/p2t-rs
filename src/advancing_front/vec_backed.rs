@@ -6,6 +6,8 @@ use crate::{points::Points, shape::Point, triangles::TriangleId, PointId};
 /// and easier to update
 pub struct AdvancingFrontVec {
     nodes: Vec<(PointKey, NodeInner)>,
+    /// In my local test, hit rate is about 40%
+    access_cache: Option<(PointKey, usize)>,
 }
 
 /// New type to wrap `Point` as Node's key
@@ -113,19 +115,23 @@ impl AdvancingFrontVec {
 
         nodes.sort_unstable_by_key(|e| e.0);
 
-        Self { nodes }
+        Self {
+            nodes,
+            access_cache: None,
+        }
     }
 
     /// insert a new node for point and triangle
     /// or update the node pointing to new triangle
     pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
         debug_assert!(!triangle_id.invalid());
-        match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
+        let node_index = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => {
                 self.nodes[idx].1 = NodeInner {
                     point_id,
                     triangle: Some(triangle_id),
                 };
+                idx
             }
             Err(idx) => {
                 self.nodes.insert(
@@ -138,8 +144,10 @@ impl AdvancingFrontVec {
                         },
                     ),
                 );
+                idx
             }
-        }
+        };
+        self.access_cache = Some((PointKey(point), node_index));
     }
 
     /// delete the node identified by `point`
@@ -150,11 +158,17 @@ impl AdvancingFrontVec {
             }
             Err(_) => {}
         }
+
+        // clear cache
+        self.access_cache = None;
     }
 
     /// delete the node identified by `point`
     pub fn delete_node(&mut self, node: NodeRef) {
         self.nodes.remove(node.index);
+
+        // clear cache
+        self.access_cache = None;
     }
 
     /// Get `n`th node
@@ -195,11 +209,19 @@ impl AdvancingFrontVec {
 
     /// update node's triangle
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
+        if let Some((p, i)) = self.access_cache {
+            if p.0.eq(&point) {
+                self.nodes[i].1.triangle = Some(triangle_id);
+                return;
+            }
+        }
         let idx = self
             .nodes
             .binary_search_by_key(&PointKey(point), |e| e.0)
             .unwrap();
         self.nodes[idx].1.triangle = Some(triangle_id);
+
+        self.access_cache = Some((PointKey(point), idx));
     }
 
     /// Get next node of the node identified by `point`
