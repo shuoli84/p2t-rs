@@ -193,10 +193,12 @@ impl AdvancingFrontVec {
 
     /// Get the node identified by `point`
     pub fn get_node(&self, point: Point) -> Option<NodeRef> {
-        match self.search_by_key(&PointKey(point)) {
-            Ok(idx) => Some(self.nodes[idx].1.to_node(idx, point, self)),
-            Err(_) => None,
-        }
+        let index = match self.access_cache {
+            Some((p, i)) if p.0.eq(&point) => i,
+            _ => self.search_by_key(&PointKey(point)).ok()?,
+        };
+
+        Some(self.nodes[index].1.to_node(index, point, self))
     }
 
     /// update node's triangle

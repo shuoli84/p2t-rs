@@ -659,14 +659,8 @@ impl ConstrainedEdge {
 
 /// EdgeEvent related methods
 impl Sweeper {
-    fn edge_event(
-        edge: Edge,
-        node_point: Point,
-        context: &mut Context,
-        observer: &mut impl Observer,
-    ) {
-        let p = context.points.get_point(edge.p).unwrap();
-        let q = context.points.get_point(edge.q).unwrap();
+    fn edge_event(edge: Edge, q: Point, context: &mut Context, observer: &mut impl Observer) {
+        let p = edge.p.get(&context.points);
 
         let constrain_edge = ConstrainedEdge {
             constrained_edge: edge,
@@ -677,22 +671,22 @@ impl Sweeper {
 
         {
             // check and fill
-            let node = context.advancing_front.get_node(node_point).unwrap();
+            let node = context.advancing_front.get_node(q).unwrap();
 
-            let triangle = node.triangle.unwrap();
-            if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle, context) {
+            let triangle_id = node.triangle.unwrap();
+            if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle_id, context) {
                 // the edge is already an edge of the triangle, return
                 return;
             }
 
             // for now we will do all needed filling
-            Self::fill_edge_event(&constrain_edge, node_point, context, observer);
+            Self::fill_edge_event(&constrain_edge, q, context, observer);
         }
 
         // node's triangle may changed, get the latest
         let triangle = context
             .advancing_front
-            .get_node(node_point)
+            .get_node(q)
             .unwrap()
             .triangle
             .unwrap();
@@ -723,25 +717,18 @@ impl Sweeper {
         t_id: TriangleId,
         context: &mut Context,
     ) -> bool {
-        let triangles = &mut context.triangles;
-        let triangle = triangles.get_mut_unchecked(t_id);
-        match triangle.edge_index(p, q) {
-            None => {
-                return false;
-            }
-            Some(index) => {
-                triangle.set_constrained(index, true);
+        let triangle = context.triangles.get_mut_unchecked(t_id);
+        let Some(index) = triangle.edge_index(p, q) else { return false; };
 
-                // The triangle may or may not has a valid neighbor
-                let neighbor_t_id = triangle.neighbors[index];
-                if let Some(t) = triangles.get_mut(neighbor_t_id) {
-                    let index = t.edge_index(p, q).unwrap();
-                    t.set_constrained(index, true);
-                }
-
-                true
-            }
+        triangle.set_constrained(index, true);
+        let neighbor_t_id = triangle.neighbors[index];
+        if !neighbor_t_id.invalid() {
+            let ot = context.triangles.get_mut_unchecked(neighbor_t_id);
+            let index = ot.neighbor_index(t_id);
+            ot.set_constrained(index, true);
         }
+
+        true
     }
 
     fn fill_edge_event(

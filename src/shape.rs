@@ -253,6 +253,18 @@ impl InnerTriangle {
         }
     }
 
+    pub fn neighbor_index(&self, tid: TriangleId) -> usize {
+        if self.neighbors[0] == tid {
+            0
+        } else if self.neighbors[1] == tid {
+            1
+        } else if self.neighbors[2] == tid {
+            2
+        } else {
+            panic!("not valid neighbor")
+        }
+    }
+
     /// neighbor counter clockwise to given point
     pub fn neighbor_ccw(&self, p: PointId) -> TriangleId {
         if p == self.points[0] {
