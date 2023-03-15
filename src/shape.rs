@@ -309,15 +309,32 @@ impl InnerTriangle {
     }
 
     pub fn edge_index(&self, p: PointId, q: PointId) -> Option<usize> {
-        let p_index = self.point_index(p)?;
-        let q_index = self.point_index(q)?;
-
-        // 0, 1, 2 => 00 01 10
-        Some(match p_index | q_index {
-            0b01 => 2, // 0,1 or 1,0
-            0b11 => 0, // 1,2 or 2,1
-            0b10 => 1, // 0,2 or 2,0
-            _ => return None,
+        Some(if self.points[0] == p {
+            if self.points[1] == q {
+                2
+            } else if self.points[2] == q {
+                1
+            } else {
+                return None;
+            }
+        } else if self.points[1] == p {
+            if self.points[0] == q {
+                2
+            } else if self.points[2] == q {
+                0
+            } else {
+                return None;
+            }
+        } else if self.points[2] == p {
+            if self.points[0] == q {
+                1
+            } else if self.points[1] == q {
+                0
+            } else {
+                return None;
+            }
+        } else {
+            return None;
         })
     }
 
