@@ -119,6 +119,12 @@ struct DrawObserver {
     // whether all process done
     finalized: bool,
 
+    /// how many legalize steps triggered
+    legalized_step_count: u64,
+    point_count: u64,
+    edge_count: u64,
+    rotate_count: u64,
+
     /// svgs
     frames: Vec<String>,
     frame_messages: Vec<Vec<String>>,
@@ -135,6 +141,10 @@ impl DrawObserver {
             finalized: false,
             frames: vec![],
             frame_messages: vec![],
+            legalized_step_count: 0,
+            point_count: 0,
+            edge_count: 0,
+            rotate_count: 0,
         }
     }
 
@@ -149,11 +159,19 @@ impl DrawObserver {
             // the name of the struct can be anything
             frames: &'a [String],
             frame_messages: &'a [Vec<String>],
+            legalized_count: u64,
+            point_count: u64,
+            edge_count: u64,
+            rotate_count: u64,
         }
 
         let html_content = DrawTemplate {
             frames: self.frames.as_slice(),
             frame_messages: &self.frame_messages,
+            legalized_count: self.legalized_step_count,
+            point_count: self.point_count,
+            edge_count: self.edge_count,
+            rotate_count: self.rotate_count,
         }
         .render()
         .unwrap();
@@ -164,6 +182,7 @@ impl DrawObserver {
 
 impl Observer for DrawObserver {
     fn point_event(&mut self, point_id: poly2tri_rs::PointId, context: &Context) {
+        self.point_count += 1;
         if !self.point {
             return;
         }
@@ -174,6 +193,7 @@ impl Observer for DrawObserver {
     }
 
     fn edge_event(&mut self, edge: Edge, context: &Context) {
+        self.edge_count += 1;
         if !self.edge {
             return;
         }
@@ -192,6 +212,16 @@ impl Observer for DrawObserver {
 
     fn legalize_step(&mut self, _triangle_id: TriangleId, _context: &Context) {
         // do nothing for now
+        self.legalized_step_count += 1;
+    }
+
+    fn triangle_rotated(
+        &mut self,
+        _triangle_id: TriangleId,
+        _opposite_triangle_id: TriangleId,
+        _context: &Context,
+    ) {
+        self.rotate_count += 1;
     }
 
     fn legalized(&mut self, _triangle_id: TriangleId, _context: &Context) {

@@ -68,7 +68,21 @@
 {% let frame_count = frames.len() %}
 
 <body>
-    Total {{ frame_count }} steps
+    <p>
+        Total {{ frame_count }} steps
+    </p>
+    <p>
+        legalize steps: {{legalized_count}}
+    </p>
+    <p>
+        rotate count: {{rotate_count}}
+    </p>
+    <p>
+        point count: {{point_count}}
+    </p>
+    <p>
+        edge count: {{edge_count}}
+    </p>
 
     <div class="slidecontainer">
         <input type="range" min="1" max="{{ frame_count }}" value="1" class="slider" id="myRange" autofocus>

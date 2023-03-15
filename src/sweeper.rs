@@ -30,6 +30,16 @@ pub trait Observer {
     #[inline]
     fn legalize_step(&mut self, triangle_id: TriangleId, context: &Context) {}
 
+    /// A rotate happened
+    #[inline]
+    fn triangle_rotated(
+        &mut self,
+        triangle_id: TriangleId,
+        opposite_triangle_id: TriangleId,
+        context: &Context,
+    ) {
+    }
+
     /// The triangle legalized
     #[inline]
     fn legalized(&mut self, triangel_id: TriangleId, context: &Context) {}
@@ -383,15 +393,14 @@ impl Sweeper {
                 let p = triangle.points[point_idx];
                 let op = opposite_triangle.opposite_point(&triangle, p);
 
-                let illegal = unsafe {
-                    in_circle(
-                        context.points.get_point_uncheck(p),
-                        context.points.get_point_uncheck(triangle.point_ccw(p)),
-                        context.points.get_point_uncheck(triangle.point_cw(p)),
-                        context.points.get_point_uncheck(op),
-                    )
-                };
+                let illegal = in_circle(
+                    p.get(&context.points),
+                    triangle.point_ccw(p).get(&context.points),
+                    triangle.point_cw(p).get(&context.points),
+                    op.get(&context.points),
+                );
                 if illegal {
+                    observer.triangle_rotated(triangle_id, opposite_triangle_id, context);
                     // rotate shared edge one vertex cw to legalize it
                     let need_remap = Self::rotate_triangle_pair(
                         triangle_id,
