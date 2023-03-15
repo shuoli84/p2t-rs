@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, marker::PhantomData};
 
 use crate::{triangles::TriangleId, Point, PointId};
 
@@ -48,10 +48,20 @@ impl PointKey {
 }
 
 #[derive(Debug)]
-pub struct Node {
-    pub point_id: PointId,
+pub struct Node<'a> {
+    point_id: PointId,
     /// last node's triangle is None
     pub triangle: Option<TriangleId>,
+    /// current index, used to optimize retrieve prev, next etc
+    index: usize,
+
+    _priv: PhantomData<&'a str>,
+}
+
+impl Node<'_> {
+    pub fn point_id(&self) -> PointId {
+        self.point_id
+    }
 }
 
 #[cfg(test)]
@@ -88,19 +98,27 @@ mod tests {
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
-            let prev_node = advancing_front.prev_node(point).unwrap();
+            let prev_node = advancing_front.locate_prev_node(point).unwrap();
             assert_eq!(prev_node.0.x, -1.);
 
-            let next_node = advancing_front.next_node(point).unwrap();
+            let next_node = advancing_front.locate_next_node(point).unwrap();
             assert_eq!(next_node.0.x, 1.);
 
             assert_eq!(
-                advancing_front.prev_node(Point::new(-0.5, 0.)).unwrap().0.x,
+                advancing_front
+                    .locate_prev_node(Point::new(-0.5, 0.))
+                    .unwrap()
+                    .0
+                    .x,
                 -1.
             );
 
             assert_eq!(
-                advancing_front.next_node(Point::new(-0.5, 0.)).unwrap().0.x,
+                advancing_front
+                    .locate_next_node(Point::new(-0.5, 0.))
+                    .unwrap()
+                    .0
+                    .x,
                 0.
             );
 
