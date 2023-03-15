@@ -23,6 +23,10 @@ impl TriangleId {
         self.0
     }
 
+    pub fn from_index(index: usize) -> Self {
+        Self(index)
+    }
+
     pub fn into_option(self) -> Option<Self> {
         if self.invalid() {
             None
@@ -53,7 +57,7 @@ impl TriangleStore {
 
     /// insert a new triangle
     pub fn insert(&mut self, triangle: InnerTriangle) -> TriangleId {
-        let id = TriangleId(self.triangles.len());
+        let id = TriangleId::from_index(self.triangles.len());
         self.triangles.push(triangle);
         id
     }
@@ -62,16 +66,16 @@ impl TriangleStore {
         if id == TriangleId::INVALID {
             return None;
         }
-        unsafe { Some(self.triangles.get_unchecked(id.0)) }
+        unsafe { Some(self.triangles.get_unchecked(id.as_usize())) }
     }
 
     pub fn get_unchecked(&self, id: TriangleId) -> &InnerTriangle {
         debug_assert!(!id.invalid());
-        unsafe { self.triangles.get_unchecked(id.0) }
+        unsafe { self.triangles.get_unchecked(id.as_usize()) }
     }
 
     pub fn get_mut(&mut self, id: TriangleId) -> Option<&mut InnerTriangle> {
-        self.triangles.get_mut(id.0)
+        self.triangles.get_mut(id.as_usize())
     }
 
     pub(crate) unsafe fn get_mut_two(
@@ -79,13 +83,17 @@ impl TriangleStore {
         id_0: TriangleId,
         id_1: TriangleId,
     ) -> (&mut InnerTriangle, &mut InnerTriangle) {
-        assert!(id_0 != id_1 && id_0.0 < self.triangles.len() && id_1.0 < self.triangles.len());
+        assert!(
+            id_0 != id_1
+                && id_0.as_usize() < self.triangles.len()
+                && id_1.as_usize() < self.triangles.len()
+        );
 
         let slice: *mut InnerTriangle = self.triangles.as_mut_ptr();
 
         // satefy: asserted that id_0 != id_1 && id_0 < len && id_1 < len
-        let ref_0 = unsafe { &mut *slice.add(id_0.0) };
-        let ref_1 = unsafe { &mut *slice.add(id_1.0) };
+        let ref_0 = unsafe { &mut *slice.add(id_0.as_usize()) };
+        let ref_1 = unsafe { &mut *slice.add(id_1.as_usize()) };
 
         (ref_0, ref_1)
     }
@@ -106,33 +114,37 @@ impl TriangleStore {
         Option<&mut InnerTriangle>,
         Option<&mut InnerTriangle>,
     ) {
-        assert!(id_0 != id_1 && id_0.0 < self.triangles.len() && id_1.0 < self.triangles.len());
+        assert!(
+            id_0 != id_1
+                && id_0.as_usize() < self.triangles.len()
+                && id_1.as_usize() < self.triangles.len()
+        );
 
         let slice: *mut InnerTriangle = self.triangles.as_mut_ptr();
 
         // satefy: asserted that id_0 != id_1 && id_0 < len && id_1 < len
-        let ref_0 = unsafe { &mut *slice.add(id_0.0) };
-        let ref_1 = unsafe { &mut *slice.add(id_1.0) };
+        let ref_0 = unsafe { &mut *slice.add(id_0.as_usize()) };
+        let ref_1 = unsafe { &mut *slice.add(id_1.as_usize()) };
         let ref_2 = if !id_2.invalid() {
-            Some(unsafe { &mut *slice.add(id_2.0) })
+            Some(unsafe { &mut *slice.add(id_2.as_usize()) })
         } else {
             None
         };
 
         let ref_3 = if !id_3.invalid() {
-            Some(unsafe { &mut *slice.add(id_3.0) })
+            Some(unsafe { &mut *slice.add(id_3.as_usize()) })
         } else {
             None
         };
 
         let ref_4 = if !id_4.invalid() {
-            Some(unsafe { &mut *slice.add(id_4.0) })
+            Some(unsafe { &mut *slice.add(id_4.as_usize()) })
         } else {
             None
         };
 
         let ref_5 = if !id_5.invalid() {
-            Some(unsafe { &mut *slice.add(id_5.0) })
+            Some(unsafe { &mut *slice.add(id_5.as_usize()) })
         } else {
             None
         };
@@ -141,14 +153,14 @@ impl TriangleStore {
     }
 
     pub fn get_mut_unchecked(&mut self, id: TriangleId) -> &mut InnerTriangle {
-        unsafe { self.triangles.get_unchecked_mut(id.0) }
+        unsafe { self.triangles.get_unchecked_mut(id.as_usize()) }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (TriangleId, &InnerTriangle)> {
         self.triangles
             .iter()
             .enumerate()
-            .map(|(idx, t)| (TriangleId(idx), t))
+            .map(|(idx, t)| (TriangleId::from_index(idx), t))
     }
 
     /// mark two triangle as neighbor
