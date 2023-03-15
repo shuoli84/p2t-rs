@@ -22,6 +22,14 @@ impl TriangleId {
     pub fn as_usize(&self) -> usize {
         self.0
     }
+
+    pub fn into_option(self) -> Option<Self> {
+        if self.invalid() {
+            None
+        } else {
+            Some(self)
+        }
+    }
 }
 
 /// Triangle store, store triangles and their neighborhood relations

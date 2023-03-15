@@ -55,7 +55,7 @@ impl PointKey {
 struct NodeInner {
     point_id: PointId,
     /// last node's triangle is None
-    pub triangle: Option<TriangleId>,
+    pub triangle: TriangleId,
 }
 
 impl NodeInner {
@@ -68,7 +68,7 @@ impl NodeInner {
         NodeRef {
             point_id: self.point_id,
             point,
-            triangle: self.triangle,
+            triangle: self.triangle.into_option(),
             index,
             advancing_front,
         }
@@ -95,21 +95,21 @@ impl AdvancingFrontVec {
             first_point.into(),
             NodeInner {
                 point_id: triangle.points[1],
-                triangle: Some(triangle_id),
+                triangle: triangle_id,
             },
         ));
         nodes.push((
             middle_point.into(),
             NodeInner {
                 point_id: triangle.points[0],
-                triangle: Some(triangle_id),
+                triangle: triangle_id,
             },
         ));
         nodes.push((
             tail_node.into(),
             NodeInner {
                 point_id: triangle.points[2],
-                triangle: None,
+                triangle: TriangleId::INVALID,
             },
         ));
 
@@ -127,7 +127,7 @@ impl AdvancingFrontVec {
         debug_assert!(!triangle_id.invalid());
         let new_node = NodeInner {
             point_id,
-            triangle: Some(triangle_id),
+            triangle: triangle_id,
         };
         let node_index = match self.search_by_key(&PointKey(point)) {
             Ok(idx) => {
@@ -157,7 +157,7 @@ impl AdvancingFrontVec {
         // update first, update won't modify index, so later delete is still safe
         let node = self.nodes.get_mut(update_index).unwrap();
         debug_assert!(node.1.point_id == point_id, "point_id mismatch");
-        node.1.triangle = Some(triangle_id);
+        node.1.triangle = triangle_id;
 
         // then delete
         self.nodes.remove(delete_index);
@@ -186,8 +186,8 @@ impl AdvancingFrontVec {
     pub fn locate_node(&self, point: Point) -> Option<NodeRef> {
         let key = PointKey(point);
         let idx = match self.search_by_key(&key) {
-            Ok(idx) => idx,
             Err(idx) => idx - 1,
+            Ok(idx) => idx,
         };
         let point = self.nodes[idx].0.point();
         Some(self.nodes[idx].1.to_node(idx, point, self))
@@ -207,12 +207,12 @@ impl AdvancingFrontVec {
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
         if let Some((p, i)) = self.access_cache {
             if p.0.eq(&point) {
-                self.nodes[i].1.triangle = Some(triangle_id);
+                self.nodes[i].1.triangle = triangle_id;
                 return;
             }
         }
         let idx = self.search_by_key(&PointKey(point)).unwrap();
-        self.nodes[idx].1.triangle = Some(triangle_id);
+        self.nodes[idx].1.triangle = triangle_id;
 
         self.access_cache = Some((PointKey(point), idx));
     }
