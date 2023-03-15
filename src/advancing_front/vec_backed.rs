@@ -62,8 +62,8 @@ impl NodeInner {
         index: usize,
         point: Point,
         advancing_front: &'b AdvancingFront,
-    ) -> Node<'b> {
-        Node {
+    ) -> NodeRef<'b> {
+        NodeRef {
             point_id: self.point_id,
             point,
             triangle: self.triangle,
@@ -153,18 +153,18 @@ impl AdvancingFrontVec {
     }
 
     /// delete the node identified by `point`
-    pub fn delete_node(&mut self, node: Node) {
+    pub fn delete_node(&mut self, node: NodeRef) {
         self.nodes.remove(node.index);
     }
 
     /// Get `n`th node
-    pub fn nth(&self, n: usize) -> Option<(Point, Node)> {
+    pub fn nth(&self, n: usize) -> Option<NodeRef> {
         self.nodes
             .get(n)
-            .map(|(k, v)| (k.point(), v.to_node(n, k.point(), self)))
+            .map(|(k, v)| v.to_node(n, k.point(), self))
     }
 
-    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = Node> + 'a> {
+    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = NodeRef> + 'a> {
         Box::new(
             self.nodes
                 .iter()
@@ -175,7 +175,7 @@ impl AdvancingFrontVec {
 
     /// locate the node containing point
     /// locate the node for `x`
-    pub fn locate_node(&self, x: f64) -> Option<Node> {
+    pub fn locate_node(&self, x: f64) -> Option<NodeRef> {
         let key = PointKey(Point::new(x, f64::MAX));
         let idx = match self.nodes.binary_search_by_key(&key, |e| e.0) {
             Ok(idx) => idx,
@@ -186,7 +186,7 @@ impl AdvancingFrontVec {
     }
 
     /// Get the node identified by `point`
-    pub fn get_node(&self, point: Point) -> Option<Node> {
+    pub fn get_node(&self, point: Point) -> Option<NodeRef> {
         match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => Some(self.nodes[idx].1.to_node(idx, point, self)),
             Err(_) => None,
@@ -204,7 +204,7 @@ impl AdvancingFrontVec {
 
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    pub fn locate_next_node(&self, point: Point) -> Option<Node> {
+    pub fn locate_next_node(&self, point: Point) -> Option<NodeRef> {
         let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => idx + 1,
             Err(idx) => idx,
@@ -222,7 +222,7 @@ impl AdvancingFrontVec {
 
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    pub(super) fn next_node(&self, node: &Node) -> Option<Node> {
+    pub(super) fn next_node(&self, node: &NodeRef) -> Option<NodeRef> {
         let idx = node.index + 1;
         if idx < self.nodes.len() {
             Some(
@@ -237,7 +237,7 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    pub fn locate_prev_node(&self, point: Point) -> Option<Node> {
+    pub fn locate_prev_node(&self, point: Point) -> Option<NodeRef> {
         let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
@@ -251,7 +251,7 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    pub(super) fn prev_node(&self, node: &Node) -> Option<Node> {
+    pub(super) fn prev_node(&self, node: &NodeRef) -> Option<NodeRef> {
         if node.index == 0 {
             return None;
         }

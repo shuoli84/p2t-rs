@@ -1,4 +1,4 @@
-use crate::advancing_front::{AdvancingFront, Node};
+use crate::advancing_front::{AdvancingFront, NodeRef};
 use crate::edge::{Edges, EdgesBuilder};
 use crate::points::{Points, PointsBuilder};
 use crate::triangles::TriangleId;
@@ -231,7 +231,7 @@ impl Sweeper {
     fn finalize_polygon(context: &mut Context) -> Option<()> {
         // get an internal triangle to start with
         // the first node is head, artificial point, so skip
-        let (_, node) = context.advancing_front.nth(1)?;
+        let node = context.advancing_front.nth(1)?;
 
         let mut t = node.triangle?;
 
@@ -598,7 +598,7 @@ impl Sweeper {
         }
     }
 
-    fn large_hole_dont_fill(node_point: Point, node: &Node) -> bool {
+    fn large_hole_dont_fill(node_point: Point, node: &NodeRef) -> bool {
         let next_node = node.next().unwrap();
         let prev_node = node.prev().unwrap();
 

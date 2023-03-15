@@ -5,7 +5,7 @@ use crate::{triangles::TriangleId, Point, PointId};
 mod vec_backed;
 pub use vec_backed::AdvancingFrontVec as AdvancingFront;
 
-pub struct Node<'a> {
+pub struct NodeRef<'a> {
     point_id: PointId,
     point: Point,
     /// last node's triangle is None
@@ -16,7 +16,7 @@ pub struct Node<'a> {
     advancing_front: &'a AdvancingFront,
 }
 
-impl Node<'_> {
+impl NodeRef<'_> {
     pub fn point(&self) -> Point {
         self.point
     }
@@ -25,11 +25,11 @@ impl Node<'_> {
         self.point_id
     }
 
-    pub fn next(&self) -> Option<Node> {
+    pub fn next(&self) -> Option<NodeRef> {
         self.advancing_front.next_node(self)
     }
 
-    pub fn prev(&self) -> Option<Node> {
+    pub fn prev(&self) -> Option<NodeRef> {
         self.advancing_front.prev_node(self)
     }
 }
