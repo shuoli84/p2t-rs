@@ -572,7 +572,7 @@ impl Sweeper {
             while let Some(next_node) = context.advancing_front.locate_next_node(node_point) {
                 if next_node.next().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
-                    if Self::large_hole_dont_fill(next_node.point(), &next_node) {
+                    if Self::large_hole_dont_fill(&next_node) {
                         break;
                     }
 
@@ -591,7 +591,7 @@ impl Sweeper {
             while let Some(prev_node) = context.advancing_front.locate_prev_node(node_point) {
                 if prev_node.prev().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
-                    if Self::large_hole_dont_fill(prev_node.point(), &prev_node) {
+                    if Self::large_hole_dont_fill(&prev_node) {
                         break;
                     }
 
@@ -609,11 +609,11 @@ impl Sweeper {
         }
     }
 
-    fn large_hole_dont_fill(node_point: Point, node: &NodeRef) -> bool {
+    fn large_hole_dont_fill(node: &NodeRef) -> bool {
         let next_node = node.next().unwrap();
         let prev_node = node.prev().unwrap();
 
-        let angle = crate::utils::Angle::new(node_point, next_node.point(), prev_node.point());
+        let angle = crate::utils::Angle::new(node.point(), next_node.point(), prev_node.point());
         if angle.exceeds_90_degree() {
             return false;
         }
