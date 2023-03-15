@@ -5,51 +5,10 @@ use crate::{triangles::TriangleId, Point, PointId};
 mod vec_backed;
 pub use vec_backed::AdvancingFrontVec as AdvancingFront;
 
-/// New type to wrap `Point` as Node's key
-#[derive(Debug, Clone, Copy)]
-struct PointKey(Point);
-
-impl PartialEq for PointKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.x.eq(&other.0.x) && self.0.y.eq(&other.0.y)
-    }
-}
-
-impl Eq for PointKey {}
-
-impl PartialOrd for PointKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.0.x.partial_cmp(&other.0.x) {
-            None | Some(Ordering::Equal) => self.0.y.partial_cmp(&other.0.y),
-            x_order => {
-                return x_order;
-            }
-        }
-    }
-}
-
-impl Ord for PointKey {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
-    }
-}
-
-impl From<Point> for PointKey {
-    fn from(value: Point) -> Self {
-        Self(value)
-    }
-}
-
-impl PointKey {
-    /// clone the point
-    fn point(&self) -> Point {
-        self.0
-    }
-}
-
 #[derive(Debug)]
 pub struct Node<'a> {
     point_id: PointId,
+    point: Point,
     /// last node's triangle is None
     pub triangle: Option<TriangleId>,
     /// current index, used to optimize retrieve prev, next etc
@@ -59,6 +18,10 @@ pub struct Node<'a> {
 }
 
 impl Node<'_> {
+    pub fn point(&self) -> Point {
+        self.point
+    }
+
     pub fn point_id(&self) -> PointId {
         self.point_id
     }
@@ -102,7 +65,7 @@ mod tests {
             assert_eq!(prev_node.0.x, -1.);
 
             let next_node = advancing_front.locate_next_node(point).unwrap();
-            assert_eq!(next_node.0.x, 1.);
+            assert_eq!(next_node.point().x, 1.);
 
             assert_eq!(
                 advancing_front
@@ -117,7 +80,7 @@ mod tests {
                 advancing_front
                     .locate_next_node(Point::new(-0.5, 0.))
                     .unwrap()
-                    .0
+                    .point()
                     .x,
                 0.
             );
