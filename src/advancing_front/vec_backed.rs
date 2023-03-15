@@ -118,7 +118,6 @@ impl AdvancingFrontVec {
 
     /// insert a new node for point and triangle
     /// or update the node pointing to new triangle
-    #[inline(never)]
     pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
         debug_assert!(!triangle_id.invalid());
         match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
@@ -144,7 +143,6 @@ impl AdvancingFrontVec {
     }
 
     /// delete the node identified by `point`
-    #[inline(never)]
     pub fn delete(&mut self, point: Point) {
         match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => {
@@ -155,20 +153,17 @@ impl AdvancingFrontVec {
     }
 
     /// delete the node identified by `point`
-    #[inline(never)]
     pub fn delete_node(&mut self, node: Node) {
         self.nodes.remove(node.index);
     }
 
     /// Get `n`th node
-    #[inline(never)]
     pub fn nth(&self, n: usize) -> Option<(Point, Node)> {
         self.nodes
             .get(n)
             .map(|(k, v)| (k.point(), v.to_node(n, k.point(), self)))
     }
 
-    #[inline(never)]
     pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Point, Node)> + 'a> {
         Box::new(
             self.nodes
@@ -180,7 +175,6 @@ impl AdvancingFrontVec {
 
     /// locate the node containing point
     /// locate the node for `x`
-    #[inline(never)]
     pub fn locate_node(&self, x: f64) -> Option<Node> {
         let key = PointKey(Point::new(x, f64::MAX));
         let idx = match self.nodes.binary_search_by_key(&key, |e| e.0) {
@@ -192,7 +186,6 @@ impl AdvancingFrontVec {
     }
 
     /// Get the node identified by `point`
-    #[inline(never)]
     pub fn get_node(&self, point: Point) -> Option<Node> {
         match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => Some(self.nodes[idx].1.to_node(idx, point, self)),
@@ -201,7 +194,6 @@ impl AdvancingFrontVec {
     }
 
     /// update node's triangle
-    #[inline(never)]
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
         let idx = self
             .nodes
@@ -212,7 +204,6 @@ impl AdvancingFrontVec {
 
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    #[inline(never)]
     pub fn locate_next_node(&self, point: Point) -> Option<Node> {
         let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) => idx + 1,
@@ -231,7 +222,6 @@ impl AdvancingFrontVec {
 
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    #[inline(never)]
     pub(super) fn next_node(&self, node: &Node) -> Option<Node> {
         let idx = node.index + 1;
         if idx < self.nodes.len() {
@@ -247,7 +237,6 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    #[inline(never)]
     pub fn locate_prev_node(&self, point: Point) -> Option<Node> {
         let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
@@ -262,7 +251,6 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    #[inline(never)]
     pub(super) fn prev_node(&self, node: &Node) -> Option<Node> {
         if node.index == 0 {
             return None;

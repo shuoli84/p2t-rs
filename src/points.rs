@@ -123,13 +123,11 @@ impl Points {
     }
 
     /// get point for id
-    #[inline(never)]
     pub fn get_point(&self, point_id: PointId) -> Option<Point> {
         self.points.get(point_id.0).cloned()
     }
 
     /// get point for id
-    #[inline(never)]
     pub unsafe fn get_point_uncheck(&self, point_id: PointId) -> Point {
         unsafe { self.points.get_unchecked(point_id.0).clone() }
     }
