@@ -295,7 +295,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         let node = context.advancing_front.locate_node(point.x).unwrap();
-        let next_node = context.advancing_front.next_node(&node).unwrap();
+        let next_node = node.next().unwrap();
         let node_point = node.point();
 
         let triangle = context.triangles.insert(InnerTriangle::new(
@@ -522,8 +522,8 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) -> Option<()> {
         let node = context.advancing_front.get_node(node_point).unwrap();
-        let prev_node = context.advancing_front.prev_node(&node)?;
-        let next_node = context.advancing_front.next_node(&node)?;
+        let prev_node = node.prev()?;
+        let next_node = node.next()?;
 
         let new_triangle = context.triangles.insert(InnerTriangle::new(
             prev_node.point_id(),
@@ -559,13 +559,9 @@ impl Sweeper {
             // fill right holes
             let mut node_point = node_point;
             while let Some(next_node) = context.advancing_front.locate_next_node(node_point) {
-                if context.advancing_front.next_node(&next_node).is_some() {
+                if next_node.next().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
-                    if Self::large_hole_dont_fill(
-                        next_node.point(),
-                        &next_node,
-                        &context.advancing_front,
-                    ) {
+                    if Self::large_hole_dont_fill(next_node.point(), &next_node) {
                         break;
                     }
 
@@ -582,13 +578,9 @@ impl Sweeper {
             let mut node_point = node_point;
 
             while let Some(prev_node) = context.advancing_front.locate_prev_node(node_point) {
-                if context.advancing_front.prev_node(&prev_node).is_some() {
+                if prev_node.prev().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
-                    if Self::large_hole_dont_fill(
-                        prev_node.point(),
-                        &prev_node,
-                        &context.advancing_front,
-                    ) {
+                    if Self::large_hole_dont_fill(prev_node.point(), &prev_node) {
                         break;
                     }
 
@@ -606,13 +598,9 @@ impl Sweeper {
         }
     }
 
-    fn large_hole_dont_fill(
-        node_point: Point,
-        node: &Node,
-        advancing_front: &AdvancingFront,
-    ) -> bool {
-        let next_node = advancing_front.next_node(node).unwrap();
-        let prev_node = advancing_front.prev_node(node).unwrap();
+    fn large_hole_dont_fill(node_point: Point, node: &Node) -> bool {
+        let next_node = node.next().unwrap();
+        let prev_node = node.prev().unwrap();
 
         let angle = crate::utils::Angle::new(node_point, next_node.point(), prev_node.point());
         if angle.exceeds_90_degree() {
@@ -791,8 +779,8 @@ impl Sweeper {
 
         let node = context.advancing_front.get_node(node_point).unwrap();
 
-        let next_node = context.advancing_front.next_node(&node).unwrap();
-        let next_next_node = context.advancing_front.next_node(&next_node).unwrap();
+        let next_node = node.next().unwrap();
+        let next_next_node = next_node.next().unwrap();
 
         if orient_2d(node_point, next_node.point(), next_next_node.point()).is_ccw() {
             // concave
@@ -830,7 +818,7 @@ impl Sweeper {
             // next above or below edge?
             if orient_2d(edge.q, next_node.point(), edge.p).is_ccw() {
                 //  below
-                let next_next_node = context.advancing_front.next_node(&next_node).unwrap();
+                let next_next_node = next_node.next().unwrap();
                 if orient_2d(node_point, next_node.point(), next_next_node.point()).is_ccw() {
                     // next is concave
                     Self::fill_right_concave_edge_event(edge, node_point, context, observer);
@@ -851,8 +839,8 @@ impl Sweeper {
             .advancing_front
             .locate_next_node(node_point)
             .unwrap();
-        let next_next_node = context.advancing_front.next_node(&next_node).unwrap();
-        let next_next_next_node = context.advancing_front.next_node(&next_next_node).unwrap();
+        let next_next_node = next_node.next().unwrap();
+        let next_next_next_node = next_next_node.next().unwrap();
         // next concave or convex?
         if orient_2d(
             next_node.point(),
@@ -906,7 +894,7 @@ impl Sweeper {
                 .advancing_front
                 .locate_prev_node(node_point)
                 .unwrap();
-            let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
+            let prev_prev_node = prev_node.prev().unwrap();
             if orient_2d(node_point, prev_node.point(), prev_prev_node.point()).is_cw() {
                 Self::fill_left_concave_edge_event(edge, node_point, context, observer);
             } else {
@@ -930,8 +918,8 @@ impl Sweeper {
             .advancing_front
             .locate_prev_node(node_point)
             .unwrap();
-        let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
-        let prev_prev_prev_node = context.advancing_front.prev_node(&prev_prev_node).unwrap();
+        let prev_prev_node = prev_node.prev().unwrap();
+        let prev_prev_prev_node = prev_prev_node.prev().unwrap();
 
         if orient_2d(
             prev_node.point(),
@@ -975,7 +963,7 @@ impl Sweeper {
             // next above or below edge?
             if orient_2d(edge.q, prev_node.point(), edge.p).is_cw() {
                 // below
-                let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
+                let prev_prev_node = prev_node.prev().unwrap();
                 if orient_2d(node_point, prev_node.point(), prev_prev_node.point()).is_cw() {
                     // next is concave
                     Self::fill_left_concave_edge_event(edge, node_point, context, observer);
@@ -1294,7 +1282,7 @@ impl Sweeper {
     fn basin_angle_satisfy(node_point: Point, context: &Context) -> bool {
         const TAN_3_4_PI: f64 = -1.;
         let Some(next) = context.advancing_front.locate_next_node(node_point) else { return false };
-        let Some(next_next) = context.advancing_front.next_node(&next) else { return false };
+        let Some(next_next) = next.next() else { return false };
 
         let ax = node_point.x - next_next.point().x;
         let ay = node_point.y - next_next.point().y;
@@ -1316,7 +1304,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) -> Option<()> {
         let next_node = context.advancing_front.locate_next_node(node_point)?;
-        let next_next_node = context.advancing_front.next_node(&next_node)?;
+        let next_next_node = next_node.next()?;
 
         // find the left
         let left: Point;
@@ -1401,7 +1389,7 @@ impl Sweeper {
 
             next.point()
         } else if next.point().eq(&basin.right) {
-            let prev_prev = context.advancing_front.prev_node(&prev)?;
+            let prev_prev = prev.prev()?;
             if orient_2d(node, prev.point(), prev_prev.point()).is_ccw() {
                 return None;
             }

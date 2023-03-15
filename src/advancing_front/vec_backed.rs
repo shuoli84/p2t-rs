@@ -57,13 +57,18 @@ struct NodeInner {
 }
 
 impl NodeInner {
-    fn to_node(&self, index: usize, point: Point) -> Node {
+    fn to_node<'a, 'b>(
+        &'a self,
+        index: usize,
+        point: Point,
+        advancing_front: &'b AdvancingFront,
+    ) -> Node<'b> {
         Node {
             point_id: self.point_id,
             point,
             triangle: self.triangle,
             index,
-            _priv: Default::default(),
+            advancing_front,
         }
     }
 }
@@ -160,7 +165,7 @@ impl AdvancingFrontVec {
     pub fn nth(&self, n: usize) -> Option<(Point, Node)> {
         self.nodes
             .get(n)
-            .map(|(k, v)| (k.point(), v.to_node(n, k.point())))
+            .map(|(k, v)| (k.point(), v.to_node(n, k.point(), self)))
     }
 
     #[inline(never)]
@@ -169,7 +174,7 @@ impl AdvancingFrontVec {
             self.nodes
                 .iter()
                 .enumerate()
-                .map(|(idx, (p, n))| (p.point(), n.to_node(idx, p.point()))),
+                .map(|(idx, (p, n))| (p.point(), n.to_node(idx, p.point(), self))),
         )
     }
 
@@ -183,14 +188,14 @@ impl AdvancingFrontVec {
             Err(idx) => idx - 1,
         };
         let point = self.nodes[idx].0.point();
-        Some(self.nodes[idx].1.to_node(idx, point))
+        Some(self.nodes[idx].1.to_node(idx, point, self))
     }
 
     /// Get the node identified by `point`
     #[inline(never)]
     pub fn get_node(&self, point: Point) -> Option<Node> {
         match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
-            Ok(idx) => Some(self.nodes[idx].1.to_node(idx, point)),
+            Ok(idx) => Some(self.nodes[idx].1.to_node(idx, point, self)),
             Err(_) => None,
         }
     }
@@ -214,7 +219,11 @@ impl AdvancingFrontVec {
             Err(idx) => idx,
         };
         if idx < self.nodes.len() {
-            Some(self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()))
+            Some(
+                self.nodes[idx]
+                    .1
+                    .to_node(idx, self.nodes[idx].0.point(), self),
+            )
         } else {
             None
         }
@@ -223,10 +232,14 @@ impl AdvancingFrontVec {
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
     #[inline(never)]
-    pub fn next_node(&self, node: &Node) -> Option<Node> {
+    pub(super) fn next_node(&self, node: &Node) -> Option<Node> {
         let idx = node.index + 1;
         if idx < self.nodes.len() {
-            Some(self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()))
+            Some(
+                self.nodes[idx]
+                    .1
+                    .to_node(idx, self.nodes[idx].0.point(), self),
+            )
         } else {
             None
         }
@@ -240,13 +253,17 @@ impl AdvancingFrontVec {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
         };
-        Some(self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()))
+        Some(
+            self.nodes[idx]
+                .1
+                .to_node(idx, self.nodes[idx].0.point(), self),
+        )
     }
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
     #[inline(never)]
-    pub fn prev_node(&self, node: &Node) -> Option<Node> {
+    pub(super) fn prev_node(&self, node: &Node) -> Option<Node> {
         if node.index == 0 {
             return None;
         }
@@ -255,7 +272,7 @@ impl AdvancingFrontVec {
         Some(
             self.nodes[index]
                 .1
-                .to_node(index, self.nodes[index].0.point()),
+                .to_node(index, self.nodes[index].0.point(), self),
         )
     }
 }

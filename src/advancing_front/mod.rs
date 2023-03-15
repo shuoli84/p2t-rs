@@ -1,11 +1,10 @@
-use std::{cmp::Ordering, marker::PhantomData};
+use std::cmp::Ordering;
 
 use crate::{triangles::TriangleId, Point, PointId};
 
 mod vec_backed;
 pub use vec_backed::AdvancingFrontVec as AdvancingFront;
 
-#[derive(Debug)]
 pub struct Node<'a> {
     point_id: PointId,
     point: Point,
@@ -14,7 +13,7 @@ pub struct Node<'a> {
     /// current index, used to optimize retrieve prev, next etc
     index: usize,
 
-    _priv: PhantomData<&'a str>,
+    advancing_front: &'a AdvancingFront,
 }
 
 impl Node<'_> {
@@ -24,6 +23,14 @@ impl Node<'_> {
 
     pub fn point_id(&self) -> PointId {
         self.point_id
+    }
+
+    pub fn next(&self) -> Option<Node> {
+        self.advancing_front.next_node(self)
+    }
+
+    pub fn prev(&self) -> Option<Node> {
+        self.advancing_front.prev_node(self)
     }
 }
 
