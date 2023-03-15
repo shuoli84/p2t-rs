@@ -250,13 +250,10 @@ impl AdvancingFrontVec {
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
     #[inline(never)]
-    pub fn next_node(&self, node: &Node) -> Option<(Point, Node)> {
+    pub fn next_node(&self, node: &Node) -> Option<Node> {
         let idx = node.index + 1;
         if idx < self.nodes.len() {
-            Some((
-                self.nodes[idx].0.point(),
-                self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()),
-            ))
+            Some(self.nodes[idx].1.to_node(idx, self.nodes[idx].0.point()))
         } else {
             None
         }
@@ -283,17 +280,16 @@ impl AdvancingFrontVec {
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
     #[inline(never)]
-    pub fn prev_node(&self, node: &Node) -> Option<(Point, Node)> {
+    pub fn prev_node(&self, node: &Node) -> Option<Node> {
         if node.index == 0 {
             return None;
         }
 
         let index = node.index - 1;
-        Some((
-            self.nodes[index].0.point(),
+        Some(
             self.nodes[index]
                 .1
                 .to_node(index, self.nodes[index].0.point()),
-        ))
+        )
     }
 }

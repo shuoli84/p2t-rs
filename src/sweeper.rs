@@ -526,14 +526,14 @@ impl Sweeper {
         let next_node = context.advancing_front.next_node(&node)?;
 
         let new_triangle = context.triangles.insert(InnerTriangle::new(
-            prev_node.1.point_id(),
+            prev_node.point_id(),
             node.point_id(),
-            next_node.1.point_id(),
+            next_node.point_id(),
         ));
 
         context
             .triangles
-            .mark_neighbor(new_triangle, prev_node.1.triangle.unwrap());
+            .mark_neighbor(new_triangle, prev_node.triangle.unwrap());
         context
             .triangles
             .mark_neighbor(new_triangle, node.triangle.unwrap());
@@ -541,7 +541,7 @@ impl Sweeper {
         // update prev_node's triangle to newly created
         context
             .advancing_front
-            .insert(prev_node.1.point_id(), prev_node.0, new_triangle);
+            .insert(prev_node.point_id(), prev_node.point(), new_triangle);
 
         // delete the node, after fill, it is covered by new triangle
         context.advancing_front.delete(node_point);
@@ -613,10 +613,10 @@ impl Sweeper {
         node: &Node,
         advancing_front: &AdvancingFront,
     ) -> bool {
-        let (next_point, _) = advancing_front.next_node(node).unwrap();
-        let (prev_point, _) = advancing_front.prev_node(node).unwrap();
+        let next_node = advancing_front.next_node(node).unwrap();
+        let prev_node = advancing_front.prev_node(node).unwrap();
 
-        let angle = crate::utils::Angle::new(node_point, next_point, prev_point);
+        let angle = crate::utils::Angle::new(node_point, next_node.point(), prev_node.point());
         if angle.exceeds_90_degree() {
             return false;
         }
@@ -793,8 +793,8 @@ impl Sweeper {
 
         let node = context.advancing_front.get_node(node_point).unwrap();
 
-        let (_, next_node) = context.advancing_front.next_node(&node).unwrap();
-        let (_, next_next_node) = context.advancing_front.next_node(&next_node).unwrap();
+        let next_node = context.advancing_front.next_node(&node).unwrap();
+        let next_next_node = context.advancing_front.next_node(&next_node).unwrap();
 
         if orient_2d(node_point, next_node.point(), next_next_node.point()).is_ccw() {
             // concave
@@ -832,7 +832,7 @@ impl Sweeper {
             // next above or below edge?
             if orient_2d(edge.q, next_node.point(), edge.p).is_ccw() {
                 //  below
-                let (_, next_next_node) = context.advancing_front.next_node(&next_node).unwrap();
+                let next_next_node = context.advancing_front.next_node(&next_node).unwrap();
                 if orient_2d(node_point, next_node.point(), next_next_node.point()).is_ccw() {
                     // next is concave
                     Self::fill_right_concave_edge_event(edge, node_point, context, observer);
@@ -853,8 +853,8 @@ impl Sweeper {
             .advancing_front
             .locate_next_node(node_point)
             .unwrap();
-        let (_, next_next_node) = context.advancing_front.next_node(&next_node).unwrap();
-        let (_, next_next_next_node) = context.advancing_front.next_node(&next_next_node).unwrap();
+        let next_next_node = context.advancing_front.next_node(&next_node).unwrap();
+        let next_next_next_node = context.advancing_front.next_node(&next_next_node).unwrap();
         // next concave or convex?
         if orient_2d(
             next_node.point(),
@@ -987,9 +987,8 @@ impl Sweeper {
             // next above or below edge?
             if orient_2d(edge.q, prev_node_point, edge.p).is_cw() {
                 // below
-                let (prev_prev_node_point, _) =
-                    context.advancing_front.prev_node(&prev_node).unwrap();
-                if orient_2d(node_point, prev_node_point, prev_prev_node_point).is_cw() {
+                let prev_prev_node = context.advancing_front.prev_node(&prev_node).unwrap();
+                if orient_2d(node_point, prev_node_point, prev_prev_node.point()).is_cw() {
                     // next is concave
                     Self::fill_left_concave_edge_event(edge, node_point, context, observer);
                 } else {
@@ -1307,7 +1306,7 @@ impl Sweeper {
     fn basin_angle_satisfy(node_point: Point, context: &Context) -> bool {
         const TAN_3_4_PI: f64 = -1.;
         let Some(next) = context.advancing_front.locate_next_node(node_point) else { return false };
-        let Some((_, next_next)) = context.advancing_front.next_node(&next) else { return false };
+        let Some(next_next) = context.advancing_front.next_node(&next) else { return false };
 
         let ax = node_point.x - next_next.point().x;
         let ay = node_point.y - next_next.point().y;
@@ -1329,7 +1328,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) -> Option<()> {
         let next_node = context.advancing_front.locate_next_node(node_point)?;
-        let (_, next_next_node) = context.advancing_front.next_node(&next_node)?;
+        let next_next_node = context.advancing_front.next_node(&next_node)?;
 
         // find the left
         let left: Point;
