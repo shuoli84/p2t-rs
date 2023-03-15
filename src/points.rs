@@ -4,12 +4,12 @@ use crate::shape::Point;
 
 /// new type for point id, currently is the index in context
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PointId(pub(crate) usize);
+pub struct PointId(pub(crate) u32);
 
 impl PointId {
     /// Get the inner value as usize
     pub fn as_usize(&self) -> usize {
-        self.0
+        self.0 as usize
     }
 
     /// helper method used in the crate when I know the `PointId` is valid in `Points`
@@ -31,7 +31,7 @@ impl PointsBuilder {
 
     /// Add a point
     pub fn add_point(&mut self, point: Point) -> PointId {
-        let point_id = PointId(self.points.len());
+        let point_id = PointId(self.points.len() as u32);
         self.points.push(point);
         point_id
     }
@@ -60,7 +60,7 @@ impl Points {
         let mut unsorted_points = points
             .iter()
             .enumerate()
-            .map(|(idx, p)| (PointId(idx), p))
+            .map(|(idx, p)| (PointId(idx as u32), p))
             .collect::<Vec<_>>();
 
         // sort by y
@@ -103,9 +103,9 @@ impl Points {
 
             let head = Point::new(xmin - dx, ymin - dy);
             let tail = Point::new(xmax + dx, ymin - dy);
-            let head_id = PointId(points.len());
+            let head_id = PointId(points.len() as u32);
             points.push(head);
-            let tail_id = PointId(points.len());
+            let tail_id = PointId(points.len() as u32);
             points.push(tail);
             (head_id, tail_id)
         };
@@ -124,12 +124,12 @@ impl Points {
 
     /// get point for id
     pub fn get_point(&self, point_id: PointId) -> Option<Point> {
-        self.points.get(point_id.0).cloned()
+        self.points.get(point_id.as_usize()).cloned()
     }
 
     /// get point for id
     pub unsafe fn get_point_uncheck(&self, point_id: PointId) -> Point {
-        unsafe { self.points.get_unchecked(point_id.0).clone() }
+        unsafe { self.points.get_unchecked(point_id.as_usize()).clone() }
     }
 
     pub fn iter_point_by_y<'a>(
@@ -137,7 +137,7 @@ impl Points {
         order: usize,
     ) -> impl Iterator<Item = (PointId, Point)> + 'a {
         self.y_sorted.iter().skip(order).map(|id| {
-            let point = self.points[id.0];
+            let point = self.points[id.as_usize()];
             (*id, point)
         })
     }
@@ -153,6 +153,6 @@ impl Points {
         self.points
             .iter()
             .enumerate()
-            .map(|(idx, p)| (PointId(idx), p))
+            .map(|(idx, p)| (PointId(idx as u32), p))
     }
 }
