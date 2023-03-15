@@ -159,19 +159,7 @@ impl TriangleStore {
         left_triangle: &mut InnerTriangle,
         right_triangle: &mut InnerTriangle,
     ) {
-        let (l_ei, r_ei) = if let Some(r_ei) =
-            right_triangle.edge_index(left_triangle.points[1], left_triangle.points[2])
-        {
-            (0, r_ei)
-        } else if let Some(r_ei) =
-            right_triangle.edge_index(left_triangle.points[0], left_triangle.points[2])
-        {
-            (1, r_ei)
-        } else if let Some(r_ei) =
-            right_triangle.edge_index(left_triangle.points[0], left_triangle.points[1])
-        {
-            (2, r_ei)
-        } else {
+        let Some((l_ei, r_ei)) = left_triangle.common_edge_index(&right_triangle) else {
             debug_assert!(false, "they are not neighbors");
             return;
         };
