@@ -177,6 +177,7 @@ impl InnerTriangle {
         }
     }
 
+    #[inline(always)]
     pub fn set_constrained(&mut self, edge_index: usize, val: bool) {
         self.edge_attrs[edge_index].set_constrained(val);
     }
@@ -185,6 +186,7 @@ impl InnerTriangle {
         self.edge_attrs[edge_index].is_constrained()
     }
 
+    #[inline(always)]
     pub fn set_delaunay(&mut self, edge_index: usize, val: bool) {
         self.edge_attrs[edge_index].set_delaunay(val);
     }

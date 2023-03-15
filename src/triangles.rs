@@ -58,9 +58,7 @@ impl TriangleStore {
     }
 
     pub fn get_unchecked(&self, id: TriangleId) -> &InnerTriangle {
-        if id == TriangleId::INVALID {
-            panic!("id should be valid");
-        }
+        debug_assert!(!id.invalid());
         unsafe { self.triangles.get_unchecked(id.0) }
     }
 

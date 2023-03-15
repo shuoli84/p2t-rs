@@ -125,25 +125,17 @@ impl AdvancingFrontVec {
     /// or update the node pointing to new triangle
     pub fn insert(&mut self, point_id: PointId, point: Point, triangle_id: TriangleId) {
         debug_assert!(!triangle_id.invalid());
-        let node_index = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
+        let new_node = NodeInner {
+            point_id,
+            triangle: Some(triangle_id),
+        };
+        let node_index = match self.search_by_key(&PointKey(point)) {
             Ok(idx) => {
-                self.nodes[idx].1 = NodeInner {
-                    point_id,
-                    triangle: Some(triangle_id),
-                };
+                self.nodes[idx].1 = new_node;
                 idx
             }
             Err(idx) => {
-                self.nodes.insert(
-                    idx,
-                    (
-                        point.into(),
-                        NodeInner {
-                            point_id,
-                            triangle: Some(triangle_id),
-                        },
-                    ),
-                );
+                self.nodes.insert(idx, (point.into(), new_node));
                 idx
             }
         };
@@ -152,7 +144,7 @@ impl AdvancingFrontVec {
 
     /// delete the node identified by `point`
     pub fn delete(&mut self, point: Point) {
-        match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
+        match self.search_by_key(&PointKey(point)) {
             Ok(idx) => {
                 self.nodes.remove(idx);
             }
@@ -191,7 +183,7 @@ impl AdvancingFrontVec {
     /// locate the node for `x`
     pub fn locate_node(&self, x: f64) -> Option<NodeRef> {
         let key = PointKey(Point::new(x, f64::MAX));
-        let idx = match self.nodes.binary_search_by_key(&key, |e| e.0) {
+        let idx = match self.search_by_key(&key) {
             Ok(idx) => idx,
             Err(idx) => idx - 1,
         };
@@ -201,7 +193,7 @@ impl AdvancingFrontVec {
 
     /// Get the node identified by `point`
     pub fn get_node(&self, point: Point) -> Option<NodeRef> {
-        match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
+        match self.search_by_key(&PointKey(point)) {
             Ok(idx) => Some(self.nodes[idx].1.to_node(idx, point, self)),
             Err(_) => None,
         }
@@ -215,10 +207,7 @@ impl AdvancingFrontVec {
                 return;
             }
         }
-        let idx = self
-            .nodes
-            .binary_search_by_key(&PointKey(point), |e| e.0)
-            .unwrap();
+        let idx = self.search_by_key(&PointKey(point)).unwrap();
         self.nodes[idx].1.triangle = Some(triangle_id);
 
         self.access_cache = Some((PointKey(point), idx));
@@ -227,7 +216,7 @@ impl AdvancingFrontVec {
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
     pub fn locate_next_node(&self, point: Point) -> Option<NodeRef> {
-        let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
+        let idx = match self.search_by_key(&PointKey(point)) {
             Ok(idx) => idx + 1,
             Err(idx) => idx,
         };
@@ -260,7 +249,7 @@ impl AdvancingFrontVec {
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
     pub fn locate_prev_node(&self, point: Point) -> Option<NodeRef> {
-        let idx = match self.nodes.binary_search_by_key(&PointKey(point), |e| e.0) {
+        let idx = match self.search_by_key(&PointKey(point)) {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
         };
@@ -284,5 +273,9 @@ impl AdvancingFrontVec {
                 .1
                 .to_node(index, self.nodes[index].0.point(), self),
         )
+    }
+
+    fn search_by_key(&self, key: &PointKey) -> Result<usize, usize> {
+        self.nodes.binary_search_by_key(key, |e| e.0)
     }
 }
