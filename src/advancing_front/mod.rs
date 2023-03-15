@@ -60,14 +60,14 @@ mod tests {
         let triangle_id = triangles.insert(InnerTriangle::new(p_0, p_1, p_2));
         let triangle = triangles.get(triangle_id).unwrap();
 
-        let mut advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
+        let advancing_front = AdvancingFront::new(triangle, triangle_id, &points);
         {
-            let p = advancing_front.locate_node(0.).unwrap();
+            let p = advancing_front.locate_node(Point::new(0., 10.)).unwrap();
             let point = p.point();
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
-            let p = advancing_front.locate_node(0.3).unwrap();
+            let p = advancing_front.locate_node(Point::new(0.3, 10.)).unwrap();
             let point = p.point();
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);

@@ -183,8 +183,8 @@ impl AdvancingFrontVec {
 
     /// locate the node containing point
     /// locate the node for `x`
-    pub fn locate_node(&self, x: f64) -> Option<NodeRef> {
-        let key = PointKey(Point::new(x, f64::MAX));
+    pub fn locate_node(&self, point: Point) -> Option<NodeRef> {
+        let key = PointKey(point);
         let idx = match self.search_by_key(&key) {
             Ok(idx) => idx,
             Err(idx) => idx - 1,

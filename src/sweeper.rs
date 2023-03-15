@@ -306,7 +306,7 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        let node = context.advancing_front.locate_node(point.x).unwrap();
+        let node = context.advancing_front.locate_node(point).unwrap();
         let next_node = node.next().unwrap();
         let node_point = node.point();
 
