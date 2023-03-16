@@ -527,14 +527,24 @@ impl Sweeper {
     /// Note: The moment it filled, advancing_front is modified.
     /// if the node is covered by another triangle, then it is deleted from advancing_front.
     /// all following advancing front lookup is affected.
+    /// Returns the new next's point info.
     fn fill_one(
         node_point: Point,
         context: &mut Context,
         observer: &mut impl Observer,
-    ) -> Option<()> {
+    ) -> Option<FillOne> {
         let node = context.advancing_front.get_node(node_point).unwrap();
         let prev_node = node.prev()?;
         let next_node = node.next()?;
+
+        // After fill and legalize, next's node won't change. So we save a version here
+        // why: Most of time, after fill, external code needs to query the new
+        //      next/prev and check whether more work needs to do. The checking logic
+        //      only requires point info.
+        let fill_one_result = FillOne {
+            prev: (prev_node.point_id(), prev_node.point()),
+            next: (next_node.point_id(), next_node.point())
+        };
 
         let new_triangle = context.triangles.insert(InnerTriangle::new(
             prev_node.point_id(),
@@ -562,8 +572,11 @@ impl Sweeper {
             )
         };
 
+        // legalize works on existing triangles, no new triangle will be created
+        // that ganrentees next point won't change
         Self::legalize(new_triangle, context, observer);
-        Some(())
+
+        Some(fill_one_result)
     }
 
     fn fill_advancing_front(
@@ -628,6 +641,11 @@ impl Sweeper {
 
         true
     }
+}
+
+struct FillOne {
+    prev: (PointId, Point),
+    next: (PointId, Point),
 }
 
 #[derive(Debug)]
