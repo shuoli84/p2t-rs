@@ -688,7 +688,7 @@ impl Sweeper {
 
         {
             // check and fill
-            let node = context.advancing_front.get_node(q).unwrap();
+            let node = context.advancing_front.get_node_with_cache(q).unwrap();
 
             let triangle_id = node.triangle.unwrap();
             let node_id = node.get_node_id();
