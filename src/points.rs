@@ -125,7 +125,7 @@ impl Points {
                 xmin = xmin.min(p.point.x);
                 ymax = ymax.max(p.point.y);
                 ymin = ymin.min(p.point.y);
-                (PointId(idx as NumType), p)
+                (PointId(idx as NumType), p.point)
             })
             .collect::<Vec<_>>();
 
@@ -134,10 +134,10 @@ impl Points {
             let p1 = p1.1;
             let p2 = p2.1;
 
-            if p1.point.y < p2.point.y {
+            if p1.y < p2.y {
                 Ordering::Less
-            } else if p1.point.y == p2.point.y {
-                if p1.point.x < p2.point.x {
+            } else if p1.y == p2.y {
+                if p1.x < p2.x {
                     Ordering::Less
                 } else {
                     Ordering::Greater
