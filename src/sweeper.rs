@@ -1492,6 +1492,9 @@ mod tests {
     struct CacheHitOb {
         hit_count: u64,
         mis_count: u64,
+        rotate_count: u64,
+        legalize_step_count: u64,
+        legalize_count: u64,
     }
 
     impl CacheHitOb {
@@ -1501,6 +1504,23 @@ mod tests {
     }
 
     impl Observer for CacheHitOb {
+        fn legalized(&mut self, _triangel_id: TriangleId, _context: &Context) {
+            self.legalize_count += 1;
+        }
+
+        fn legalize_step(&mut self, _triangle_id: TriangleId, _context: &Context) {
+            self.legalize_step_count += 1;
+        }
+
+        fn triangle_rotated(
+            &mut self,
+            _triangle_id: TriangleId,
+            _opposite_triangle_id: TriangleId,
+            _context: &Context,
+        ) {
+            self.rotate_count += 1;
+        }
+
         fn finalized(&mut self, context: &Context) {
             let hit = context
                 .advancing_front
@@ -1522,6 +1542,10 @@ mod tests {
                 context.points.len(),
                 context.triangles.len()
             );
+            println!(
+                "legalize: {} steps: {} rotate: {}",
+                self.legalize_count, self.legalize_step_count, self.rotate_count
+            );
             self.hit_count = hit;
             self.mis_count = miss;
         }
@@ -1538,7 +1562,8 @@ mod tests {
             .triangulate_with_observer(&mut cache_hit)
             .collect::<Vec<_>>();
         assert_eq!(triangles.len(), 273);
-        assert!(cache_hit.hit_rate() > 0.54);
+        assert!(cache_hit.hit_rate() > 0.74);
+        assert!(cache_hit.rotate_count <= 1043);
     }
 
     #[test]
@@ -1552,7 +1577,8 @@ mod tests {
             .triangulate_with_observer(&mut cache_hit)
             .collect::<Vec<_>>();
         assert_eq!(triangles.len(), 1034);
-        assert!(cache_hit.hit_rate() > 0.59);
+        assert!(cache_hit.hit_rate() > 0.78);
+        assert!(cache_hit.rotate_count <= 6700);
     }
 
     #[test]
