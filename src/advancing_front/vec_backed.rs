@@ -5,7 +5,7 @@ use crate::{points::Points, shape::Point, triangles::TriangleId, PointId};
 /// Advancing front, stores all advancing edges in a btree, this makes store compact
 /// and easier to update
 pub struct AdvancingFrontVec {
-    nodes: Vec<(PointKey, NodeInner)>,
+    nodes: Vec<Entry>,
     /// In my local test, hit rate is about 40%
     access_cache: Option<(PointKey, usize)>,
 }
@@ -13,6 +13,26 @@ pub struct AdvancingFrontVec {
 struct Entry {
     key: PointKey,
     node: NodeInner,
+}
+
+impl Entry {
+    fn new(key: PointKey, node: NodeInner) -> Self {
+        Self { key, node }
+    }
+
+    fn point(&self) -> Point {
+        self.key.point()
+    }
+
+    fn to_node<'a>(&self, index: usize, af: &'a AdvancingFront) -> NodeRef<'a> {
+        NodeRef {
+            point_id: self.node.point_id,
+            point: self.point(),
+            triangle: self.node.triangle.into_option(),
+            index,
+            advancing_front: af,
+        }
+    }
 }
 
 /// New type to wrap `Point` as Node's key
@@ -84,7 +104,7 @@ impl AdvancingFrontVec {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
     pub fn new(triangle: &InnerTriangle, triangle_id: TriangleId, points: &Points) -> Self {
-        let mut nodes = Vec::<(PointKey, NodeInner)>::with_capacity(32);
+        let mut nodes = Vec::<Entry>::with_capacity(32);
 
         let first_point = points
             .get_point(triangle.points[1])
@@ -96,21 +116,21 @@ impl AdvancingFrontVec {
             .get_point(triangle.points[2])
             .expect("should not fail");
 
-        nodes.push((
+        nodes.push(Entry::new(
             first_point.into(),
             NodeInner {
                 point_id: triangle.points[1],
                 triangle: triangle_id,
             },
         ));
-        nodes.push((
+        nodes.push(Entry::new(
             middle_point.into(),
             NodeInner {
                 point_id: triangle.points[0],
                 triangle: triangle_id,
             },
         ));
-        nodes.push((
+        nodes.push(Entry::new(
             tail_node.into(),
             NodeInner {
                 point_id: triangle.points[2],
@@ -118,7 +138,7 @@ impl AdvancingFrontVec {
             },
         ));
 
-        nodes.sort_unstable_by_key(|e| e.0);
+        nodes.sort_unstable_by_key(|e| e.key);
 
         Self {
             nodes,
@@ -136,11 +156,11 @@ impl AdvancingFrontVec {
         };
         let node_index = match self.search_by_key(&PointKey(point)) {
             Ok(idx) => {
-                self.nodes[idx].1 = new_node;
+                self.nodes[idx].node = new_node;
                 idx
             }
             Err(idx) => {
-                self.nodes.insert(idx, (point.into(), new_node));
+                self.nodes.insert(idx, Entry::new(point.into(), new_node));
                 idx
             }
         };
@@ -160,9 +180,9 @@ impl AdvancingFrontVec {
         debug_assert!(!triangle_id.invalid());
 
         // update first, update won't modify index, so later delete is still safe
-        let node = self.nodes.get_mut(update_index).unwrap();
-        debug_assert!(node.1.point_id == point_id, "point_id mismatch");
-        node.1.triangle = triangle_id;
+        let entry = self.nodes.get_mut(update_index).unwrap();
+        debug_assert!(entry.node.point_id == point_id, "point_id mismatch");
+        entry.node.triangle = triangle_id;
 
         // then delete
         self.nodes.remove(delete_index);
@@ -172,9 +192,7 @@ impl AdvancingFrontVec {
 
     /// Get `n`th node
     pub fn nth(&self, n: usize) -> Option<NodeRef> {
-        self.nodes
-            .get(n)
-            .map(|(k, v)| v.to_node(n, k.point(), self))
+        self.nodes.get(n).map(|entry| entry.to_node(n, self))
     }
 
     pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = NodeRef> + 'a> {
@@ -182,7 +200,7 @@ impl AdvancingFrontVec {
             self.nodes
                 .iter()
                 .enumerate()
-                .map(|(idx, (p, n))| n.to_node(idx, p.point(), self)),
+                .map(|(idx, entry)| entry.to_node(idx, self)),
         )
     }
 
@@ -194,8 +212,9 @@ impl AdvancingFrontVec {
             Err(idx) => idx - 1,
             Ok(idx) => idx,
         };
-        let point = self.nodes[idx].0.point();
-        Some(self.nodes[idx].1.to_node(idx, point, self))
+        // safety: idx is checked
+        let entry = unsafe { self.nodes.get_unchecked(idx) };
+        Some(entry.to_node(idx, self))
     }
 
     /// Get the node identified by `point`
@@ -205,7 +224,8 @@ impl AdvancingFrontVec {
             _ => self.search_by_key(&PointKey(point)).ok()?,
         };
 
-        Some(self.nodes[index].1.to_node(index, point, self))
+        // safety: idx is checked
+        Some(unsafe { self.nodes.get_unchecked(index) }.to_node(index, self))
     }
 
     /// Get the node identified by `point`
@@ -217,25 +237,28 @@ impl AdvancingFrontVec {
 
         // update cache
         self.access_cache = Some((PointKey(point), index));
-        Some(self.nodes[index].1.to_node(index, point, self))
+
+        // safety: idx is checked
+        Some(unsafe { self.nodes.get_unchecked(index) }.to_node(index, self))
     }
 
     /// Get the node identified by `point`
     pub fn get_node_with_id(&self, node_id: NodeId) -> Option<NodeRef> {
         let index = self.resolve_index_for_id(node_id).ok()?;
-        Some(self.nodes[index].1.to_node(index, node_id.point, self))
+        // safety: idx is checked
+        Some(unsafe { self.nodes.get_unchecked(index) }.to_node(index, self))
     }
 
     /// update node's triangle
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
         if let Some((p, i)) = self.access_cache {
             if p.0.eq(&point) {
-                self.nodes[i].1.triangle = triangle_id;
+                self.nodes[i].node.triangle = triangle_id;
                 return;
             }
         }
         let idx = self.search_by_key(&PointKey(point)).unwrap();
-        self.nodes[idx].1.triangle = triangle_id;
+        self.nodes[idx].node.triangle = triangle_id;
 
         self.access_cache = Some((PointKey(point), idx));
     }
@@ -248,11 +271,7 @@ impl AdvancingFrontVec {
             Err(idx) => idx,
         };
         if idx < self.nodes.len() {
-            Some(
-                self.nodes[idx]
-                    .1
-                    .to_node(idx, self.nodes[idx].0.point(), self),
-            )
+            Some(self.nodes[idx].to_node(idx, self))
         } else {
             None
         }
@@ -263,11 +282,7 @@ impl AdvancingFrontVec {
     pub(super) fn next_node(&self, node: &NodeRef) -> Option<NodeRef> {
         let idx = node.index + 1;
         if idx < self.nodes.len() {
-            Some(
-                self.nodes[idx]
-                    .1
-                    .to_node(idx, self.nodes[idx].0.point(), self),
-            )
+            Some(self.nodes[idx].to_node(idx, self))
         } else {
             None
         }
@@ -280,11 +295,9 @@ impl AdvancingFrontVec {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
         };
-        Some(
-            self.nodes[idx]
-                .1
-                .to_node(idx, self.nodes[idx].0.point(), self),
-        )
+
+        // safety: idx checked above
+        Some(unsafe { self.nodes.get_unchecked(idx) }.to_node(idx, self))
     }
 
     /// Get prev node of the node identified by `point`
@@ -295,22 +308,19 @@ impl AdvancingFrontVec {
         }
 
         let index = node.index - 1;
-        Some(
-            self.nodes[index]
-                .1
-                .to_node(index, self.nodes[index].0.point(), self),
-        )
+        // satefy: idx checked above
+        Some(unsafe { self.nodes.get_unchecked(index) }.to_node(index, self))
     }
 
     fn search_by_key(&self, key: &PointKey) -> Result<usize, usize> {
-        self.nodes.binary_search_by_key(key, |e| e.0)
+        self.nodes.binary_search_by_key(key, |e| e.key)
     }
 
     /// resolve node_id's latest index.
     /// Return Err(index to insert) when the node is deleted
     fn resolve_index_for_id(&self, node_id: NodeId) -> Result<usize, usize> {
         match self.nodes.get(node_id.index_hint) {
-            Some(node) if node.1.point_id == node_id.point_id => {
+            Some(entry) if entry.node.point_id == node_id.point_id => {
                 // index_hint match
                 Ok(node_id.index_hint)
             }
