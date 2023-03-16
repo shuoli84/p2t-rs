@@ -98,7 +98,7 @@ mod tests {
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
-            let mut p = advancing_front
+            let p = advancing_front
                 .locate_node(Point::new(0.3, 10.))
                 .unwrap()
                 .get_node_id();
@@ -106,10 +106,10 @@ mod tests {
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
-            let prev_node = advancing_front.locate_prev_node(point).unwrap();
+            let prev_node = advancing_front.locate_prev_node_by_id(p).unwrap();
             assert_eq!(prev_node.point().x, -1.);
 
-            let next_node = advancing_front.locate_next_node_by_id(&mut p).unwrap();
+            let next_node = advancing_front.locate_next_node_by_id(p).unwrap();
             assert_eq!(next_node.point().x, 1.);
 
             assert_eq!(

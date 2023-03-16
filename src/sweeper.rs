@@ -307,7 +307,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         let node = context.advancing_front.locate_node(point).unwrap();
-        let mut node_id = node.get_node_id();
+        let node_id = node.get_node_id();
         let next_node = node.next().unwrap();
         let node_point = node.point();
 
@@ -325,7 +325,7 @@ impl Sweeper {
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
         if point.x <= node_point.x + f64::EPSILON {
-            Self::fill_one(&mut node_id, context, observer);
+            Self::fill_one(node_id, context, observer);
         }
 
         Self::fill_advancing_front(point, context, observer);
@@ -530,7 +530,7 @@ impl Sweeper {
     /// all following advancing front lookup is affected.
     /// Returns the new next's point info.
     fn fill_one(
-        node: &mut NodeId,
+        node: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) -> Option<FillOne> {
@@ -585,7 +585,7 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        let mut node_id = context
+        let node_id = context
             .advancing_front
             .get_node(node_point)
             .unwrap()
@@ -594,8 +594,7 @@ impl Sweeper {
         {
             // fill right holes
             let mut node_id = node_id.clone();
-            while let Some(next_node) = context.advancing_front.locate_next_node_by_id(&mut node_id)
-            {
+            while let Some(next_node) = context.advancing_front.locate_next_node_by_id(node_id) {
                 if next_node.next().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
                     if Self::large_hole_dont_fill(&next_node) {
@@ -603,7 +602,7 @@ impl Sweeper {
                     }
 
                     node_id = next_node.get_node_id();
-                    Self::fill_one(&mut next_node.get_node_id(), context, observer);
+                    Self::fill_one(next_node.get_node_id(), context, observer);
                 } else {
                     break;
                 }
@@ -614,8 +613,7 @@ impl Sweeper {
             // fill left holes
             let mut node_id = node_id.clone();
 
-            while let Some(prev_node) = context.advancing_front.locate_prev_node_by_id(&mut node_id)
-            {
+            while let Some(prev_node) = context.advancing_front.locate_prev_node_by_id(node_id) {
                 if prev_node.prev().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
                     if Self::large_hole_dont_fill(&prev_node) {
@@ -623,7 +621,7 @@ impl Sweeper {
                     }
 
                     node_id = prev_node.get_node_id();
-                    Self::fill_one(&mut node_id, context, observer);
+                    Self::fill_one(node_id, context, observer);
                 } else {
                     break;
                 }
@@ -631,8 +629,8 @@ impl Sweeper {
         }
 
         // fill right basins
-        if Self::basin_angle_satisfy(&mut node_id, context) {
-            Self::fill_basin(&mut node_id, context, observer);
+        if Self::basin_angle_satisfy(node_id, context) {
+            Self::fill_basin(node_id, context, observer);
         }
     }
 
@@ -706,14 +704,14 @@ impl Sweeper {
             let node = context.advancing_front.get_node_with_cache(q).unwrap();
 
             let triangle_id = node.triangle.unwrap();
-            let mut node_id = node.get_node_id();
+            let node_id = node.get_node_id();
             if Self::try_mark_edge_for_triangle(edge.p, edge.q, triangle_id, context) {
                 // the edge is already an edge of the triangle, return
                 return;
             }
 
             // for now we will do all needed filling
-            Self::fill_edge_event(&constrain_edge, &mut node_id, context, observer);
+            Self::fill_edge_event(&constrain_edge, node_id, context, observer);
         }
 
         // node's triangle may changed, get the latest
@@ -766,7 +764,7 @@ impl Sweeper {
 
     fn fill_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -779,19 +777,19 @@ impl Sweeper {
 
     fn fill_right_above_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
         let mut node_id = node_id.clone();
-        while let Some(next_node) = context.advancing_front.locate_next_node_by_id(&mut node_id) {
+        while let Some(next_node) = context.advancing_front.locate_next_node_by_id(node_id) {
             if next_node.point().x >= edge.p.x {
                 break;
             }
 
             // check if next node is below the edge
             if orient_2d(edge.q, next_node.point(), edge.p).is_ccw() {
-                Self::fill_right_below_edge_event(edge, &mut node_id, context, observer);
+                Self::fill_right_below_edge_event(edge, node_id, context, observer);
             } else {
                 // try next node
                 node_id = next_node.get_node_id();
@@ -801,7 +799,7 @@ impl Sweeper {
 
     fn fill_right_below_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -809,7 +807,7 @@ impl Sweeper {
             return;
         }
 
-        let node = context.advancing_front.get_node_with_id(&node_id).unwrap();
+        let node = context.advancing_front.get_node_with_id(node_id).unwrap();
 
         let next_node = node.next().unwrap();
         let next_next_node = next_node.next().unwrap();
@@ -829,7 +827,7 @@ impl Sweeper {
     /// recursively fill concave nodes
     fn fill_right_concave_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -838,7 +836,7 @@ impl Sweeper {
                 .advancing_front
                 .locate_next_node_by_id(node_id)
                 .unwrap();
-            Self::fill_one(&mut next_node.get_node_id(), context, observer);
+            Self::fill_one(next_node.get_node_id(), context, observer);
         };
 
         let next_node = context
@@ -863,7 +861,7 @@ impl Sweeper {
 
     fn fill_right_convex_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -890,7 +888,7 @@ impl Sweeper {
                 // Below
                 Self::fill_right_convex_edge_event(
                     edge,
-                    &mut next_node.get_node_id(),
+                    next_node.get_node_id(),
                     context,
                     observer,
                 );
@@ -902,19 +900,19 @@ impl Sweeper {
 
     fn fill_left_above_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
         let mut node_id = node_id.clone();
-        while let Some(prev_node) = context.advancing_front.locate_prev_node_by_id(&mut node_id) {
+        while let Some(prev_node) = context.advancing_front.locate_prev_node_by_id(node_id) {
             // check if next node is below the edge
             if prev_node.point().x <= edge.p.x {
                 break;
             }
 
             if orient_2d(edge.q, prev_node.point(), edge.p).is_cw() {
-                Self::fill_left_below_edge_event(edge, &mut node_id, context, observer);
+                Self::fill_left_below_edge_event(edge, node_id, context, observer);
             } else {
                 node_id = prev_node.get_node_id();
             }
@@ -923,7 +921,7 @@ impl Sweeper {
 
     fn fill_left_below_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -947,7 +945,7 @@ impl Sweeper {
 
     fn fill_left_convex_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -967,23 +965,13 @@ impl Sweeper {
         .is_cw()
         {
             // concave
-            Self::fill_left_concave_edge_event(
-                edge,
-                &mut prev_node.get_node_id(),
-                context,
-                observer,
-            );
+            Self::fill_left_concave_edge_event(edge, prev_node.get_node_id(), context, observer);
         } else {
             // convex
             // next above or below edge?
             if orient_2d(edge.q, prev_prev_node.point(), edge.p).is_cw() {
                 // below
-                Self::fill_left_convex_edge_event(
-                    edge,
-                    &mut prev_node.get_node_id(),
-                    context,
-                    observer,
-                );
+                Self::fill_left_convex_edge_event(edge, prev_node.get_node_id(), context, observer);
             } else {
                 // above
             }
@@ -992,7 +980,7 @@ impl Sweeper {
 
     fn fill_left_concave_edge_event(
         edge: &ConstrainedEdge,
-        node_id: &mut NodeId,
+        node_id: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
@@ -1000,7 +988,7 @@ impl Sweeper {
             .advancing_front
             .locate_prev_node_by_id(node_id)
             .unwrap();
-        Self::fill_one(&mut prev_node.get_node_id(), context, observer);
+        Self::fill_one(prev_node.get_node_id(), context, observer);
 
         let prev_node = context
             .advancing_front
@@ -1327,7 +1315,7 @@ impl Basin {
 
 /// Basin related methods
 impl Sweeper {
-    fn basin_angle_satisfy(node_id: &mut NodeId, context: &Context) -> bool {
+    fn basin_angle_satisfy(node_id: NodeId, context: &Context) -> bool {
         const TAN_3_4_PI: f64 = -1.;
         let Some(next) = context.advancing_front.locate_next_node_by_id(node_id) else { return false };
         let Some(next_next) = next.next() else { return false };
@@ -1347,7 +1335,7 @@ impl Sweeper {
     /// basin is like a bowl, we first identify it's left, bottom, right node.
     /// then fill it
     fn fill_basin(
-        node_point: &mut NodeId,
+        node_point: NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) -> Option<()> {
@@ -1401,7 +1389,7 @@ impl Sweeper {
         let left_higher: bool = left.point().y > right.point().y;
 
         Self::fill_basin_req(
-            &mut bottom.clone().get_node_id(),
+            bottom.get_node_id(),
             &Basin {
                 left: left.point(),
                 right: right.point(),
@@ -1416,7 +1404,7 @@ impl Sweeper {
     }
 
     fn fill_basin_req(
-        node: &mut NodeId,
+        node: NodeId,
         basin: &Basin,
         context: &mut Context,
         observer: &mut impl Observer,
@@ -1458,7 +1446,7 @@ impl Sweeper {
             }
         };
 
-        Self::fill_basin_req(&mut new_node.get_node_id(), basin, context, observer)
+        Self::fill_basin_req(new_node.get_node_id(), basin, context, observer)
     }
 }
 

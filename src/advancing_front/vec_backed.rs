@@ -216,7 +216,7 @@ impl AdvancingFrontVec {
     }
 
     /// Get the node identified by `point`
-    pub fn get_node_with_id(&self, node_id: &NodeId) -> Option<NodeRef> {
+    pub fn get_node_with_id(&self, node_id: NodeId) -> Option<NodeRef> {
         let index = match self.nodes.get(node_id.index_hint) {
             Some(node) if node.1.point_id == node_id.point_id => {
                 // index_hint match
@@ -263,7 +263,7 @@ impl AdvancingFrontVec {
 
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    pub fn locate_next_node_by_id(&self, node_id: &mut NodeId) -> Option<NodeRef> {
+    pub fn locate_next_node_by_id(&self, node_id: NodeId) -> Option<NodeRef> {
         let idx = match self.resolve_index_for_id(node_id) {
             Ok(idx) => idx + 1,
             Err(idx) => idx,
@@ -310,7 +310,7 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    pub fn locate_prev_node_by_id(&self, node_id: &mut NodeId) -> Option<NodeRef> {
+    pub fn locate_prev_node_by_id(&self, node_id: NodeId) -> Option<NodeRef> {
         let idx = match self.resolve_index_for_id(node_id) {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
@@ -343,7 +343,7 @@ impl AdvancingFrontVec {
 
     /// resolve node_id's latest index.
     /// Return Err(index to insert) when the node is deleted
-    fn resolve_index_for_id(&self, node_id: &mut NodeId) -> Result<usize, usize> {
+    fn resolve_index_for_id(&self, node_id: NodeId) -> Result<usize, usize> {
         match self.nodes.get(node_id.index_hint) {
             Some(node) if node.1.point_id == node_id.point_id => {
                 // index_hint match
@@ -351,7 +351,6 @@ impl AdvancingFrontVec {
             }
             _ => {
                 let idx = self.search_by_key(&PointKey(node_id.point))?;
-                node_id.index_hint = idx;
                 Ok(idx)
             }
         }
