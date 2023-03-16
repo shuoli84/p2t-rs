@@ -307,6 +307,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         let node = context.advancing_front.locate_node(point).unwrap();
+        let mut node_id = node.get_node_id();
         let next_node = node.next().unwrap();
         let node_point = node.point();
 
@@ -324,7 +325,7 @@ impl Sweeper {
         // in middle case, the node's x should be less than point'x
         // in left case, they are same.
         if point.x <= node_point.x + f64::EPSILON {
-            Self::fill_one(node_point, context, observer);
+            Self::fill_one(&mut node_id, context, observer);
         }
 
         Self::fill_advancing_front(point, context, observer);
@@ -529,11 +530,11 @@ impl Sweeper {
     /// all following advancing front lookup is affected.
     /// Returns the new next's point info.
     fn fill_one(
-        node_point: Point,
+        node: &mut NodeId,
         context: &mut Context,
         observer: &mut impl Observer,
     ) -> Option<FillOne> {
-        let node = context.advancing_front.get_node(node_point).unwrap();
+        let node = context.advancing_front.get_node_with_id(node).unwrap();
         let prev_node = node.prev()?;
         let next_node = node.next()?;
 
@@ -542,8 +543,8 @@ impl Sweeper {
         //      next/prev and check whether more work needs to do. The checking logic
         //      only requires point info.
         let fill_one_result = FillOne {
-            prev: (prev_node.point_id(), prev_node.point()),
-            next: (next_node.point_id(), next_node.point()),
+            prev: prev_node.get_node_id(),
+            next: next_node.get_node_id(),
         };
 
         let new_triangle = context.triangles.insert(InnerTriangle::new(
@@ -602,7 +603,7 @@ impl Sweeper {
                     }
 
                     node_id = next_node.get_node_id();
-                    Self::fill_one(next_node.point(), context, observer);
+                    Self::fill_one(&mut next_node.get_node_id(), context, observer);
                 } else {
                     break;
                 }
@@ -622,7 +623,7 @@ impl Sweeper {
                     }
 
                     node_id = prev_node.get_node_id();
-                    Self::fill_one(prev_node.point(), context, observer);
+                    Self::fill_one(&mut node_id, context, observer);
                 } else {
                     break;
                 }
@@ -652,8 +653,8 @@ impl Sweeper {
 }
 
 struct FillOne {
-    prev: (PointId, Point),
-    next: (PointId, Point),
+    prev: NodeId,
+    next: NodeId,
 }
 
 #[derive(Debug)]
@@ -837,7 +838,7 @@ impl Sweeper {
                 .advancing_front
                 .locate_next_node_by_id(node_id)
                 .unwrap();
-            Self::fill_one(next_node.point(), context, observer);
+            Self::fill_one(&mut next_node.get_node_id(), context, observer);
         };
 
         let next_node = context
@@ -999,7 +1000,7 @@ impl Sweeper {
             .advancing_front
             .locate_prev_node_by_id(node_id)
             .unwrap();
-        Self::fill_one(prev_node.point(), context, observer);
+        Self::fill_one(&mut prev_node.get_node_id(), context, observer);
 
         let prev_node = context
             .advancing_front
@@ -1424,8 +1425,7 @@ impl Sweeper {
             return None;
         }
 
-        // todo
-        Self::fill_one(node.point(), context, observer);
+        Self::fill_one(node, context, observer);
 
         // find the next node to fill
         let prev = context.advancing_front.locate_prev_node_by_id(node)?;
