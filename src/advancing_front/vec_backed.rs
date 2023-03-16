@@ -199,7 +199,7 @@ impl AdvancingFront {
     /// locate the node for `x`
     pub fn locate_node(&self, point: Point) -> Option<NodeRef> {
         let key = PointKey(point);
-        let idx = match self.search_by_key_with_cache(&key) {
+        let idx = match self.search_by_key(&key) {
             Err(idx) => idx - 1,
             Ok(idx) => idx,
         };
