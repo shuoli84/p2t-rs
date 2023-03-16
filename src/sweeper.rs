@@ -849,11 +849,10 @@ impl Sweeper {
         if next_id.point_id() != edge.p_id() {
             // next above or below edge?
             if orient_2d(edge.q, next_id.point(), edge.p).is_ccw() {
-                let next_node = context.advancing_front.get_node_with_id(next_id).unwrap();
+                let next_next_node = context.advancing_front.locate_next_node(next_id).unwrap();
 
                 //  below
-                let next_next_node = next_node.next().unwrap();
-                if orient_2d(node_id.point(), next_node.point(), next_next_node.point()).is_ccw() {
+                if orient_2d(node_id.point(), next_id.point(), next_next_node.point()).is_ccw() {
                     // next is concave
                     Self::fill_right_concave_edge_event(edge, node_id, context, observer);
                 } else {
@@ -980,13 +979,21 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         let prev_node = context.advancing_front.locate_prev_node(node_id).unwrap();
-        Self::fill_one(prev_node.get_node_id(), context, observer);
 
-        let prev_node = context.advancing_front.locate_prev_node(node_id).unwrap();
+        let prev_node_id = prev_node.get_node_id();
 
-        if prev_node.point_id() != edge.p_id() {
+        let prev_node_id = match Self::fill_one(prev_node_id, context, observer) {
+            Some(fill_one) => fill_one.prev,
+            None => prev_node_id,
+        };
+
+        if prev_node_id.point_id() != edge.p_id() {
             // next above or below edge?
-            if orient_2d(edge.q, prev_node.point(), edge.p).is_cw() {
+            if orient_2d(edge.q, prev_node_id.point(), edge.p).is_cw() {
+                let prev_node = context
+                    .advancing_front
+                    .get_node_with_id(prev_node_id)
+                    .unwrap();
                 // below
                 let prev_prev_node = prev_node.prev().unwrap();
                 if orient_2d(node_id.point(), prev_node.point(), prev_prev_node.point()).is_cw() {
@@ -1112,16 +1119,11 @@ impl Sweeper {
         legalize_queue: &mut Vec<TriangleId>,
         context: &mut Context,
     ) {
-        assert!(!triangle_id.invalid());
-
-        let t = context.triangles.get_unchecked(triangle_id);
-
+        let t = triangle_id.get(&context.triangles);
         let ot_id = t.neighbor_across(p);
-        assert!(!ot_id.invalid(), "neighbor must be valid");
-
-        let ot = context.triangles.get_unchecked(ot_id);
-
+        let ot = ot_id.get(&context.triangles);
         let op = ot.opposite_point(t, p);
+
         if in_scan_area(
             p.get(&context.points),
             t.point_ccw(p).get(&context.points),
@@ -1402,30 +1404,30 @@ impl Sweeper {
             return None;
         }
 
-        Self::fill_one(node, context, observer);
-
-        // find the next node to fill
-        let prev = context.advancing_front.locate_prev_node(node)?;
-        let next = context.advancing_front.locate_next_node(node)?;
+        let fill_one = Self::fill_one(node, context, observer).expect("already in basin");
+        let prev = fill_one.prev;
+        let next = fill_one.next;
 
         if prev.point().eq(&basin.left) && next.point().eq(&basin.right) {
             return Some(());
         }
 
         let new_node = if prev.point().eq(&basin.left) {
+            let next = context.advancing_front.get_node_with_id(next).unwrap();
             let next_next = next.next().unwrap();
             if orient_2d(node.point(), next.point(), next_next.point()).is_cw() {
                 return None;
             }
 
-            next
+            next.get_node_id()
         } else if next.point().eq(&basin.right) {
+            let prev = context.advancing_front.get_node_with_id(prev).unwrap();
             let prev_prev = prev.prev()?;
             if orient_2d(node.point(), prev.point(), prev_prev.point()).is_ccw() {
                 return None;
             }
 
-            prev
+            prev.get_node_id()
         } else {
             // continue with the neighbor node with lowest Y value
             if prev.point().y < next.point().y {
@@ -1435,7 +1437,7 @@ impl Sweeper {
             }
         };
 
-        Self::fill_basin_req(new_node.get_node_id(), basin, context, observer)
+        Self::fill_basin_req(new_node, basin, context, observer)
     }
 }
 

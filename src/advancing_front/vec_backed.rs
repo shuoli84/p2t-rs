@@ -271,7 +271,8 @@ impl AdvancingFrontVec {
             Err(idx) => idx,
         };
         if idx < self.nodes.len() {
-            Some(self.nodes[idx].to_node(idx, self))
+            // safety: idx checked above
+            Some(unsafe { self.nodes.get_unchecked(idx) }.to_node(idx, self))
         } else {
             None
         }
