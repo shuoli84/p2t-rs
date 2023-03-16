@@ -83,23 +83,6 @@ struct NodeInner {
     pub triangle: TriangleId,
 }
 
-impl NodeInner {
-    fn to_node<'a, 'b>(
-        &'a self,
-        index: usize,
-        point: Point,
-        advancing_front: &'b AdvancingFront,
-    ) -> NodeRef<'b> {
-        NodeRef {
-            point_id: self.point_id,
-            point,
-            triangle: self.triangle.into_option(),
-            index,
-            advancing_front,
-        }
-    }
-}
-
 impl AdvancingFrontVec {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
@@ -259,8 +242,6 @@ impl AdvancingFrontVec {
         }
         let idx = self.search_by_key(&PointKey(point)).unwrap();
         self.nodes[idx].node.triangle = triangle_id;
-
-        self.access_cache = Some((PointKey(point), idx));
     }
 
     /// Get next node of the node identified by `point`
