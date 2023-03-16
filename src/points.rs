@@ -2,9 +2,14 @@ use std::cmp::Ordering;
 
 use crate::shape::Point;
 
+/// Type alias to the underlying type for PointId.
+/// Despite of maximum number supported, type size also affect performance
+/// PointId compare is in hot path, e.g, triangle neighbor check, find edge index etc
+type NumType = u32;
+
 /// new type for point id, currently is the index in context
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PointId(pub(crate) u32);
+pub struct PointId(pub(crate) NumType);
 
 impl PointId {
     /// Get the inner value as usize
@@ -31,7 +36,7 @@ impl PointsBuilder {
 
     /// Add a point
     pub fn add_point(&mut self, point: Point) -> PointId {
-        let point_id = PointId(self.points.len() as u32);
+        let point_id = PointId(self.points.len() as NumType);
         self.points.push(point);
         point_id
     }
@@ -60,7 +65,7 @@ impl Points {
         let mut unsorted_points = points
             .iter()
             .enumerate()
-            .map(|(idx, p)| (PointId(idx as u32), p))
+            .map(|(idx, p)| (PointId(idx as NumType), p))
             .collect::<Vec<_>>();
 
         // sort by y
@@ -103,9 +108,9 @@ impl Points {
 
             let head = Point::new(xmin - dx, ymin - dy);
             let tail = Point::new(xmax + dx, ymin - dy);
-            let head_id = PointId(points.len() as u32);
+            let head_id = PointId(points.len() as NumType);
             points.push(head);
-            let tail_id = PointId(points.len() as u32);
+            let tail_id = PointId(points.len() as NumType);
             points.push(tail);
             (head_id, tail_id)
         };
@@ -153,6 +158,6 @@ impl Points {
         self.points
             .iter()
             .enumerate()
-            .map(|(idx, p)| (PointId(idx as u32), p))
+            .map(|(idx, p)| (PointId(idx as NumType), p))
     }
 }
