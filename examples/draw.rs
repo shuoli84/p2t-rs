@@ -27,6 +27,9 @@ struct Args {
 
     #[arg(long, default_value = "1")]
     bench_count: usize,
+
+    #[arg(long, default_value = "1000")]
+    frame_count: usize,
 }
 
 fn try_load_from_file(path: &std::path::PathBuf) -> Option<Vec<Point>> {
@@ -114,6 +117,8 @@ struct DrawObserver {
     point: bool,
     edge: bool,
 
+    frame_count: usize,
+
     legalizing: Option<TriangleId>,
 
     // whether all process done
@@ -145,6 +150,7 @@ impl DrawObserver {
             point_count: 0,
             edge_count: 0,
             rotate_count: 0,
+            frame_count: args.frame_count,
         }
     }
 
@@ -242,6 +248,10 @@ impl Observer for DrawObserver {
 
 impl DrawObserver {
     fn draw(&mut self, context: &Context) {
+        if self.frames.len() >= self.frame_count {
+            return;
+        }
+
         use svg::Document;
         use svg::Node;
 
