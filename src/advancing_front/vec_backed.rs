@@ -10,6 +10,11 @@ pub struct AdvancingFrontVec {
     access_cache: Option<(PointKey, usize)>,
 }
 
+struct Entry {
+    key: PointKey,
+    node: NodeInner,
+}
+
 /// New type to wrap `Point` as Node's key
 #[derive(Debug, Clone, Copy)]
 struct PointKey(Point);
@@ -217,15 +222,7 @@ impl AdvancingFrontVec {
 
     /// Get the node identified by `point`
     pub fn get_node_with_id(&self, node_id: NodeId) -> Option<NodeRef> {
-        let index = match self.nodes.get(node_id.index_hint) {
-            Some(node) if node.1.point_id == node_id.point_id => {
-                // index_hint match
-                Ok(node_id.index_hint)
-            }
-            _ => self.search_by_key(&PointKey(node_id.point)),
-        };
-
-        let index = index.ok()?;
+        let index = self.resolve_index_for_id(node_id).ok()?;
         Some(self.nodes[index].1.to_node(index, node_id.point, self))
     }
 

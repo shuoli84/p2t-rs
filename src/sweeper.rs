@@ -600,9 +600,12 @@ impl Sweeper {
                     if Self::large_hole_dont_fill(&next_node) {
                         break;
                     }
+                    let next_node_id = next_node.get_node_id();
 
-                    node_id = next_node.get_node_id();
-                    Self::fill_one(next_node.get_node_id(), context, observer);
+                    node_id = match Self::fill_one(next_node_id, context, observer) {
+                        Some(fill_one) => fill_one.next,
+                        None => next_node_id,
+                    };
                 } else {
                     break;
                 }
@@ -831,16 +834,23 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        {
+        let next_id = {
             let next_node = context.advancing_front.locate_next_node(node_id).unwrap();
-            Self::fill_one(next_node.get_node_id(), context, observer);
+            let next_id = next_node.get_node_id();
+            match Self::fill_one(next_id, context, observer) {
+                None => {
+                    // nothing changed
+                    next_id
+                }
+                Some(fill_one) => fill_one.next,
+            }
         };
 
-        let next_node = context.advancing_front.locate_next_node(node_id).unwrap();
-
-        if next_node.point_id() != edge.p_id() {
+        if next_id.point_id() != edge.p_id() {
             // next above or below edge?
-            if orient_2d(edge.q, next_node.point(), edge.p).is_ccw() {
+            if orient_2d(edge.q, next_id.point(), edge.p).is_ccw() {
+                let next_node = context.advancing_front.get_node_with_id(next_id).unwrap();
+
                 //  below
                 let next_next_node = next_node.next().unwrap();
                 if orient_2d(node_id.point(), next_node.point(), next_next_node.point()).is_ccw() {
