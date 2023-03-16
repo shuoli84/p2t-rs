@@ -106,29 +106,11 @@ mod tests {
             assert_eq!(point.x, 0.0);
             assert_eq!(point.y, 3.0);
 
-            let prev_node = advancing_front.locate_prev_node_by_id(p).unwrap();
+            let prev_node = advancing_front.locate_prev_node(p).unwrap();
             assert_eq!(prev_node.point().x, -1.);
 
-            let next_node = advancing_front.locate_next_node_by_id(p).unwrap();
+            let next_node = advancing_front.locate_next_node(p).unwrap();
             assert_eq!(next_node.point().x, 1.);
-
-            assert_eq!(
-                advancing_front
-                    .locate_prev_node(Point::new(-0.5, 0.))
-                    .unwrap()
-                    .point()
-                    .x,
-                -1.
-            );
-
-            assert_eq!(
-                advancing_front
-                    .locate_next_node(Point::new(-0.5, 0.))
-                    .unwrap()
-                    .point()
-                    .x,
-                0.
-            );
         }
     }
 }

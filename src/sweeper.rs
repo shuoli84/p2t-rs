@@ -594,7 +594,7 @@ impl Sweeper {
         {
             // fill right holes
             let mut node_id = node_id.clone();
-            while let Some(next_node) = context.advancing_front.locate_next_node_by_id(node_id) {
+            while let Some(next_node) = context.advancing_front.locate_next_node(node_id) {
                 if next_node.next().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
                     if Self::large_hole_dont_fill(&next_node) {
@@ -613,7 +613,7 @@ impl Sweeper {
             // fill left holes
             let mut node_id = node_id.clone();
 
-            while let Some(prev_node) = context.advancing_front.locate_prev_node_by_id(node_id) {
+            while let Some(prev_node) = context.advancing_front.locate_prev_node(node_id) {
                 if prev_node.prev().is_some() {
                     // if HoleAngle exceeds 90 degrees then break
                     if Self::large_hole_dont_fill(&prev_node) {
@@ -782,7 +782,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         let mut node_id = node_id.clone();
-        while let Some(next_node) = context.advancing_front.locate_next_node_by_id(node_id) {
+        while let Some(next_node) = context.advancing_front.locate_next_node(node_id) {
             if next_node.point().x >= edge.p.x {
                 break;
             }
@@ -832,17 +832,11 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         {
-            let next_node = context
-                .advancing_front
-                .locate_next_node_by_id(node_id)
-                .unwrap();
+            let next_node = context.advancing_front.locate_next_node(node_id).unwrap();
             Self::fill_one(next_node.get_node_id(), context, observer);
         };
 
-        let next_node = context
-            .advancing_front
-            .locate_next_node_by_id(node_id)
-            .unwrap();
+        let next_node = context.advancing_front.locate_next_node(node_id).unwrap();
 
         if next_node.point_id() != edge.p_id() {
             // next above or below edge?
@@ -865,10 +859,7 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        let next_node = context
-            .advancing_front
-            .locate_next_node_by_id(node_id)
-            .unwrap();
+        let next_node = context.advancing_front.locate_next_node(node_id).unwrap();
         let next_next_node = next_node.next().unwrap();
         let next_next_next_node = next_next_node.next().unwrap();
         // next concave or convex?
@@ -905,7 +896,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         let mut node_id = node_id.clone();
-        while let Some(prev_node) = context.advancing_front.locate_prev_node_by_id(node_id) {
+        while let Some(prev_node) = context.advancing_front.locate_prev_node(node_id) {
             // check if next node is below the edge
             if prev_node.point().x <= edge.p.x {
                 break;
@@ -926,10 +917,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         if node_id.point().x > edge.p.x {
-            let prev_node = context
-                .advancing_front
-                .locate_prev_node_by_id(node_id)
-                .unwrap();
+            let prev_node = context.advancing_front.locate_prev_node(node_id).unwrap();
             let prev_prev_node = prev_node.prev().unwrap();
             if orient_2d(node_id.point(), prev_node.point(), prev_prev_node.point()).is_cw() {
                 Self::fill_left_concave_edge_event(edge, node_id, context, observer);
@@ -950,10 +938,7 @@ impl Sweeper {
         observer: &mut impl Observer,
     ) {
         // next concave or convex?
-        let prev_node = context
-            .advancing_front
-            .locate_prev_node_by_id(node_id)
-            .unwrap();
+        let prev_node = context.advancing_front.locate_prev_node(node_id).unwrap();
         let prev_prev_node = prev_node.prev().unwrap();
         let prev_prev_prev_node = prev_prev_node.prev().unwrap();
 
@@ -984,16 +969,10 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) {
-        let prev_node = context
-            .advancing_front
-            .locate_prev_node_by_id(node_id)
-            .unwrap();
+        let prev_node = context.advancing_front.locate_prev_node(node_id).unwrap();
         Self::fill_one(prev_node.get_node_id(), context, observer);
 
-        let prev_node = context
-            .advancing_front
-            .locate_prev_node_by_id(node_id)
-            .unwrap();
+        let prev_node = context.advancing_front.locate_prev_node(node_id).unwrap();
 
         if prev_node.point_id() != edge.p_id() {
             // next above or below edge?
@@ -1317,7 +1296,7 @@ impl Basin {
 impl Sweeper {
     fn basin_angle_satisfy(node_id: NodeId, context: &Context) -> bool {
         const TAN_3_4_PI: f64 = -1.;
-        let Some(next) = context.advancing_front.locate_next_node_by_id(node_id) else { return false };
+        let Some(next) = context.advancing_front.locate_next_node(node_id) else { return false };
         let Some(next_next) = next.next() else { return false };
 
         let ax = node_id.point().x - next_next.point().x;
@@ -1339,7 +1318,7 @@ impl Sweeper {
         context: &mut Context,
         observer: &mut impl Observer,
     ) -> Option<()> {
-        let next_node = context.advancing_front.locate_next_node_by_id(node_point)?;
+        let next_node = context.advancing_front.locate_next_node(node_point)?;
         let next_next_node = next_node.next()?;
 
         // find the left
@@ -1416,8 +1395,8 @@ impl Sweeper {
         Self::fill_one(node, context, observer);
 
         // find the next node to fill
-        let prev = context.advancing_front.locate_prev_node_by_id(node)?;
-        let next = context.advancing_front.locate_next_node_by_id(node)?;
+        let prev = context.advancing_front.locate_prev_node(node)?;
+        let next = context.advancing_front.locate_next_node(node)?;
 
         if prev.point().eq(&basin.left) && next.point().eq(&basin.right) {
             return Some(());

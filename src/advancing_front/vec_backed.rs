@@ -245,25 +245,7 @@ impl AdvancingFrontVec {
 
     /// Get next node of the node identified by `point`
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    pub fn locate_next_node(&self, point: Point) -> Option<NodeRef> {
-        let idx = match self.search_by_key(&PointKey(point)) {
-            Ok(idx) => idx + 1,
-            Err(idx) => idx,
-        };
-        if idx < self.nodes.len() {
-            Some(
-                self.nodes[idx]
-                    .1
-                    .to_node(idx, self.nodes[idx].0.point(), self),
-            )
-        } else {
-            None
-        }
-    }
-
-    /// Get next node of the node identified by `point`
-    /// Note: even if the node is deleted, this also returns next node as if it is not deleted
-    pub fn locate_next_node_by_id(&self, node_id: NodeId) -> Option<NodeRef> {
+    pub fn locate_next_node(&self, node_id: NodeId) -> Option<NodeRef> {
         let idx = match self.resolve_index_for_id(node_id) {
             Ok(idx) => idx + 1,
             Err(idx) => idx,
@@ -296,21 +278,7 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    pub fn locate_prev_node(&self, point: Point) -> Option<NodeRef> {
-        let idx = match self.search_by_key(&PointKey(point)) {
-            Ok(idx) | Err(idx) if idx > 0 => idx - 1,
-            _ => return None,
-        };
-        Some(
-            self.nodes[idx]
-                .1
-                .to_node(idx, self.nodes[idx].0.point(), self),
-        )
-    }
-
-    /// Get prev node of the node identified by `point`
-    /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
-    pub fn locate_prev_node_by_id(&self, node_id: NodeId) -> Option<NodeRef> {
+    pub fn locate_prev_node(&self, node_id: NodeId) -> Option<NodeRef> {
         let idx = match self.resolve_index_for_id(node_id) {
             Ok(idx) | Err(idx) if idx > 0 => idx - 1,
             _ => return None,
