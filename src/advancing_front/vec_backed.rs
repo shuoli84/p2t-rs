@@ -4,10 +4,14 @@ use crate::{points::Points, shape::Point, triangles::TriangleId, PointId};
 
 /// Advancing front, stores all advancing edges in a btree, this makes store compact
 /// and easier to update
-pub struct AdvancingFrontVec {
+pub struct AdvancingFront {
     nodes: Vec<Entry>,
     /// In my local test, hit rate is about 40%
     access_cache: Option<(PointKey, usize)>,
+    #[cfg(test)]
+    pub miss_count: std::sync::atomic::AtomicU64,
+    #[cfg(test)]
+    pub hit_count: std::sync::atomic::AtomicU64,
 }
 
 struct Entry {
@@ -83,7 +87,7 @@ struct NodeInner {
     pub triangle: TriangleId,
 }
 
-impl AdvancingFrontVec {
+impl AdvancingFront {
     /// Create a new advancing front with the initial triangle
     /// Triangle's point order: P0, P-1, P-2
     pub fn new(triangle: &InnerTriangle, triangle_id: TriangleId, points: &Points) -> Self {
@@ -126,6 +130,10 @@ impl AdvancingFrontVec {
         Self {
             nodes,
             access_cache: None,
+            #[cfg(test)]
+            hit_count: 0.into(),
+            #[cfg(test)]
+            miss_count: 0.into(),
         }
     }
 
@@ -191,7 +199,7 @@ impl AdvancingFrontVec {
     /// locate the node for `x`
     pub fn locate_node(&self, point: Point) -> Option<NodeRef> {
         let key = PointKey(point);
-        let idx = match self.search_by_key(&key) {
+        let idx = match self.search_by_key_with_cache(&key) {
             Err(idx) => idx - 1,
             Ok(idx) => idx,
         };
@@ -202,10 +210,7 @@ impl AdvancingFrontVec {
 
     /// Get the node identified by `point`
     pub fn get_node(&self, point: Point) -> Option<NodeRef> {
-        let index = match self.access_cache {
-            Some((p, i)) if p.0.eq(&point) => i,
-            _ => self.search_by_key(&PointKey(point)).ok()?,
-        };
+        let index = self.search_by_key_with_cache(&PointKey(point)).ok()?;
 
         // safety: idx is checked
         Some(unsafe { self.nodes.get_unchecked(index) }.to_node(index, self))
@@ -213,10 +218,7 @@ impl AdvancingFrontVec {
 
     /// Get the node identified by `point`
     pub fn get_node_with_cache(&mut self, point: Point) -> Option<NodeRef> {
-        let index = match self.access_cache {
-            Some((p, i)) if p.0.eq(&point) => i,
-            _ => self.search_by_key(&PointKey(point)).ok()?,
-        };
+        let index = self.search_by_key_with_cache(&PointKey(point)).ok()?;
 
         // update cache
         self.access_cache = Some((PointKey(point), index));
@@ -234,13 +236,7 @@ impl AdvancingFrontVec {
 
     /// update node's triangle
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
-        if let Some((p, i)) = self.access_cache {
-            if p.0.eq(&point) {
-                self.nodes[i].node.triangle = triangle_id;
-                return;
-            }
-        }
-        let idx = self.search_by_key(&PointKey(point)).unwrap();
+        let idx = self.search_by_key_with_cache(&PointKey(point)).unwrap();
         self.nodes[idx].node.triangle = triangle_id;
     }
 
@@ -296,6 +292,87 @@ impl AdvancingFrontVec {
 
     fn search_by_key(&self, key: &PointKey) -> Result<usize, usize> {
         self.nodes.binary_search_by_key(key, |e| e.key)
+    }
+
+    fn search_by_key_with_cache(&self, key: &PointKey) -> Result<usize, usize> {
+        match self.access_cache {
+            Some((p, i)) => {
+                let order = p.cmp(key);
+                match order {
+                    Ordering::Equal => {
+                        #[cfg(test)]
+                        self.hit_count
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        Ok(i)
+                    }
+                    Ordering::Greater => {
+                        // cached key is larger, then we check one elem before
+                        match self.nodes[i - 1].key.cmp(key) {
+                            Ordering::Equal => {
+                                #[cfg(test)]
+                                self.hit_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                Ok(i - 1)
+                            }
+                            Ordering::Less => {
+                                // the prev item is less than key
+                                #[cfg(test)]
+                                self.hit_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                Err(i)
+                            }
+                            _ => {
+                                // never mind
+                                #[cfg(test)]
+                                self.miss_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                                self.nodes[..i].binary_search_by_key(key, |e| e.key)
+                            }
+                        }
+                    }
+                    Ordering::Less if i < self.nodes.len() => {
+                        match self.nodes[i + 1].key.cmp(key) {
+                            Ordering::Greater => {
+                                // the prev item is less than key
+                                #[cfg(test)]
+                                self.hit_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                Err(i + 1)
+                            }
+                            _ => {
+                                // never mind
+                                #[cfg(test)]
+                                self.miss_count
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                                self.nodes[i..]
+                                    .binary_search_by_key(key, |e| e.key)
+                                    .map(|idx| idx + i)
+                                    .map_err(|idx| idx + i)
+                            }
+                        }
+                    }
+                    _ => {
+                        #[cfg(test)]
+                        self.miss_count
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                        self.nodes[i..]
+                            .binary_search_by_key(key, |e| e.key)
+                            .map(|idx| idx + i)
+                            .map_err(|idx| idx + i)
+                    }
+                }
+            }
+            _ => {
+                #[cfg(test)]
+                self.miss_count
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                self.search_by_key(key)
+            }
+        }
     }
 
     /// resolve node_id's latest index.

@@ -688,7 +688,7 @@ impl Sweeper {
 
         {
             // check and fill
-            let node = context.advancing_front.get_node_with_cache(q).unwrap();
+            let node = context.advancing_front.get_node(q).unwrap();
 
             let triangle_id = node.triangle.unwrap();
             let node_id = node.get_node_id();
@@ -1488,14 +1488,65 @@ mod tests {
 
     use super::*;
 
+    #[derive(Default)]
+    struct CacheHitOb {
+        hit_count: u64,
+        mis_count: u64,
+    }
+
+    impl CacheHitOb {
+        pub fn hit_rate(&self) -> f64 {
+            self.hit_count as f64 / (self.hit_count + self.mis_count) as f64
+        }
+    }
+
+    impl Observer for CacheHitOb {
+        fn finalized(&mut self, context: &Context) {
+            let hit = context
+                .advancing_front
+                .hit_count
+                .load(std::sync::atomic::Ordering::Relaxed);
+            let miss = context
+                .advancing_front
+                .miss_count
+                .load(std::sync::atomic::Ordering::Relaxed);
+            println!(
+                "af cache hit: {}/{} rate: {:.2}%",
+                hit,
+                hit + miss,
+                hit as f64 / (hit + miss) as f64 * 100.
+            );
+            self.hit_count = hit;
+            self.mis_count = miss;
+        }
+    }
+
     #[test]
     fn test_bird() {
         let file_path = "test_data/bird.dat";
         let points = try_load_from_file(file_path).unwrap();
 
+        let mut cache_hit = CacheHitOb::default();
         let sweeper = SweeperBuilder::new(points).build();
-        let triangles = sweeper.triangulate().collect::<Vec<_>>();
+        let triangles = sweeper
+            .triangulate_with_observer(&mut cache_hit)
+            .collect::<Vec<_>>();
         assert_eq!(triangles.len(), 273);
+        assert!(cache_hit.hit_rate() > 0.54);
+    }
+
+    #[test]
+    fn test_nazca_heron() {
+        let file_path = "test_data/nazca_heron.dat";
+        let points = try_load_from_file(file_path).unwrap();
+
+        let sweeper = SweeperBuilder::new(points).build();
+        let mut cache_hit = CacheHitOb::default();
+        let triangles = sweeper
+            .triangulate_with_observer(&mut cache_hit)
+            .collect::<Vec<_>>();
+        assert_eq!(triangles.len(), 1034);
+        assert!(cache_hit.hit_rate() > 0.59);
     }
 
     #[test]

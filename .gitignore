@@ -2,6 +2,5 @@
 /Cargo.lock
 .DS_Store
 test_files/*.png
-test_data/
 flamegraph*.svg
 draw.html

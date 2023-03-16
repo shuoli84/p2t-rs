@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use crate::{triangles::TriangleId, Point, PointId};
 
 mod vec_backed;
-pub use vec_backed::AdvancingFrontVec as AdvancingFront;
+pub use vec_backed::AdvancingFront;
 
 /// A owned version of NodeId, this should be used when you need to pass NodeRef along with
 /// AdvancingFront's mut reference.
