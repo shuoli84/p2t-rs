@@ -55,6 +55,11 @@ impl TriangleStore {
         }
     }
 
+    /// Returns number of triangles
+    pub fn len(&self) -> usize {
+        self.triangles.len()
+    }
+
     /// insert a new triangle
     pub fn insert(&mut self, triangle: InnerTriangle) -> TriangleId {
         let id = TriangleId::from_index(self.triangles.len());

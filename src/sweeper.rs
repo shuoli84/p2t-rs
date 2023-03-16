@@ -78,7 +78,7 @@ impl SweeperBuilder {
     /// Create a new Builder with polyline
     /// There should be only one polyline, and multiple holes and steiner points supported
     pub fn new(polyline: Vec<Point>) -> Self {
-        let mut points_builder = PointsBuilder::default();
+        let mut points_builder = PointsBuilder::with_capacity(polyline.len());
         parse_polyline(polyline, &mut points_builder);
 
         Self { points_builder }
@@ -171,7 +171,7 @@ impl Sweeper {
 
     /// Run triangulate with observer
     pub fn triangulate_with_observer(self, observer: &mut impl Observer) -> Triangles {
-        let mut triangles = TriangleStore::with_capacity(self.points.len());
+        let mut triangles = TriangleStore::with_capacity(self.points.len() * 3);
 
         let initial_triangle = triangles.insert(InnerTriangle::new(
             self.points.get_id_by_y(0).unwrap(),
@@ -1515,6 +1515,12 @@ mod tests {
                 hit,
                 hit + miss,
                 hit as f64 / (hit + miss) as f64 * 100.
+            );
+
+            println!(
+                "points: {} triangle: {}",
+                context.points.len(),
+                context.triangles.len()
             );
             self.hit_count = hit;
             self.mis_count = miss;

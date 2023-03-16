@@ -23,12 +23,18 @@ impl PointId {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct PointsBuilder {
     points: Vec<PointWithEdge>,
 }
 
 impl PointsBuilder {
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            points: Vec::with_capacity(cap),
+        }
+    }
+
     /// Add a point
     pub fn add_steiner_point(&mut self, point: Point) -> PointId {
         let point_id = PointId(self.points.len() as NumType);
