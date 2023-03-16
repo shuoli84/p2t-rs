@@ -1,6 +1,5 @@
 mod advancing_front;
 mod context;
-mod edge;
 pub mod loader;
 mod points;
 mod shape;

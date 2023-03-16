@@ -272,7 +272,7 @@ impl DrawObserver {
         let mut max_x = f64::MIN;
         let mut min_y = f64::MAX;
         let mut max_y = f64::MIN;
-        for p in context.points.iter().map(|(_, p)| p) {
+        for p in context.points.iter().map(|(_, p, _)| p) {
             min_x = min_x.min(p.x);
             max_x = max_x.max(p.x);
             min_y = min_y.min(p.y);
@@ -308,7 +308,7 @@ impl DrawObserver {
         if !self.finalized {
             let point_r = from.w / 200.;
 
-            for (id, point) in context.points.iter() {
+            for (id, point, edges) in context.points.iter() {
                 let (x, y) = map.map_point(point.x, point.y);
 
                 if self.debug {
@@ -322,8 +322,8 @@ impl DrawObserver {
                     doc.append(circle((x, y), point_r, "red", "clear"));
                 }
 
-                for p_id in context.edges.p_for_q(id) {
-                    let p_point = context.points.get_point(*p_id).unwrap();
+                for p_id in edges {
+                    let p_point = context.points.get_point(p_id).unwrap();
                     let p = map.map_point(p_point.x, p_point.y);
                     let q = map.map_point(point.x, point.y);
 

@@ -1,11 +1,9 @@
 use crate::{
-    advancing_front::AdvancingFront, edge::Edges, points::Points, triangles::TriangleStore,
-    TriangleId,
+    advancing_front::AdvancingFront, points::Points, triangles::TriangleStore, TriangleId,
 };
 
 pub struct Context<'a> {
     pub points: &'a Points,
-    pub edges: &'a Edges,
     pub triangles: &'a mut TriangleStore,
     pub advancing_front: &'a mut AdvancingFront,
     pub result: Vec<TriangleId>,
@@ -21,13 +19,11 @@ pub struct Context<'a> {
 impl<'a> Context<'a> {
     pub fn new(
         points: &'a Points,
-        edges: &'a Edges,
         triangles: &'a mut TriangleStore,
         advancing_front: &'a mut AdvancingFront,
     ) -> Self {
         Self {
             points,
-            edges,
             triangles,
             advancing_front,
             result: Vec::with_capacity(points.len()),

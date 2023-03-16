@@ -204,12 +204,12 @@ mod tests {
     #[test]
     fn test_triangles() {
         let mut triangles = TriangleStore::new();
-        let mut points = PointsBuilder::new(vec![]);
+        let mut points = PointsBuilder::default();
 
-        let p0 = points.add_point(Point::new(0., 0.));
-        let p1 = points.add_point(Point::new(2., 0.));
-        let p2 = points.add_point(Point::new(1., 2.));
-        let p3 = points.add_point(Point::new(4., 2.));
+        let p0 = points.add_steiner_point(Point::new(0., 0.));
+        let p1 = points.add_steiner_point(Point::new(2., 0.));
+        let p2 = points.add_steiner_point(Point::new(1., 2.));
+        let p3 = points.add_steiner_point(Point::new(4., 2.));
 
         let t1 = triangles.insert(InnerTriangle::new(p0, p1, p2));
         let t2 = triangles.insert(InnerTriangle::new(p2, p1, p3));
@@ -226,12 +226,12 @@ mod tests {
     #[test]
     fn test_triangles_get_mut_two() {
         let mut triangles = TriangleStore::new();
-        let mut points = PointsBuilder::new(vec![]);
+        let mut points = PointsBuilder::default();
 
-        let p0 = points.add_point(Point::new(0., 0.));
-        let p1 = points.add_point(Point::new(2., 0.));
-        let p2 = points.add_point(Point::new(1., 2.));
-        let p3 = points.add_point(Point::new(4., 2.));
+        let p0 = points.add_steiner_point(Point::new(0., 0.));
+        let p1 = points.add_steiner_point(Point::new(2., 0.));
+        let p2 = points.add_steiner_point(Point::new(1., 2.));
+        let p3 = points.add_steiner_point(Point::new(4., 2.));
 
         let t1 = triangles.insert(InnerTriangle::new(p0, p1, p2));
         let t2 = triangles.insert(InnerTriangle::new(p1, p2, p3));

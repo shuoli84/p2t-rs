@@ -1,5 +1,4 @@
 use crate::advancing_front::{AdvancingFront, NodeId, NodeRef};
-use crate::edge::{Edges, EdgesBuilder};
 use crate::points::{Points, PointsBuilder};
 use crate::triangles::TriangleId;
 use crate::triangles::TriangleStore;
@@ -73,40 +72,35 @@ impl Observer for () {}
 #[derive(Clone)]
 pub struct SweeperBuilder {
     points_builder: PointsBuilder,
-    edges_builder: EdgesBuilder,
 }
 
 impl SweeperBuilder {
     /// Create a new Builder with polyline
     /// There should be only one polyline, and multiple holes and steiner points supported
     pub fn new(polyline: Vec<Point>) -> Self {
-        let mut points_builder = PointsBuilder::new(vec![]);
-        let edges = parse_polyline(polyline, &mut points_builder);
+        let mut points_builder = PointsBuilder::default();
+        parse_polyline(polyline, &mut points_builder);
 
-        Self {
-            edges_builder: EdgesBuilder::new(edges),
-            points_builder,
-        }
+        Self { points_builder }
     }
 
     /// Add a single sparse `Point`, there is no edge attached to it
     /// NOTE: if the point locates outside of polyline, then it has no
     /// effect on the final result
     pub fn add_steiner_point(mut self, point: Point) -> Self {
-        self.points_builder.add_point(point);
+        self.points_builder.add_steiner_point(point);
         self
     }
 
     /// Add multiple [`Point`], batch version for `Self::add_point`
     pub fn add_steiner_points(mut self, points: impl IntoIterator<Item = Point>) -> Self {
-        let _ = self.points_builder.add_points(points);
+        let _ = self.points_builder.add_steiner_points(points);
         self
     }
 
     /// Add a hole defined by polyline.
     pub fn add_hole(mut self, polyline: Vec<Point>) -> Self {
-        let edges = parse_polyline(polyline, &mut self.points_builder);
-        self.edges_builder.add_edges(edges);
+        parse_polyline(polyline, &mut self.points_builder);
         self
     }
 
@@ -121,19 +115,14 @@ impl SweeperBuilder {
     /// build the sweeper
     pub fn build(self) -> Sweeper {
         let points = self.points_builder.build();
-        let points_len = points.len();
-        Sweeper {
-            points,
-            edges: self.edges_builder.build(points_len),
-        }
+        Sweeper { points }
     }
 }
 
 /// Main interface, user should grab a new Sweeper by [`SweeperBuilder::build`]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Sweeper {
     points: Points,
-    edges: Edges,
 }
 
 /// The result of triangulate
@@ -197,12 +186,7 @@ impl Sweeper {
             &self.points,
         );
 
-        let mut context = Context::new(
-            &self.points,
-            &self.edges,
-            &mut triangles,
-            &mut advancing_front,
-        );
+        let mut context = Context::new(&self.points, &mut triangles, &mut advancing_front);
 
         Self::sweep_points(&mut context, observer);
         observer.sweep_done(&context);
@@ -225,12 +209,12 @@ impl Sweeper {
 
 impl Sweeper {
     fn sweep_points(context: &mut Context, observer: &mut impl Observer) {
-        for (point_id, point) in context.points.iter_point_by_y(1) {
+        for (point_id, point, edges) in context.points.iter_point_by_y(1) {
             Self::point_event(point_id, point, context, observer);
             observer.point_event(point_id, context);
 
-            for p in context.edges.p_for_q(point_id) {
-                let edge = Edge { p: *p, q: point_id };
+            for p in edges {
+                let edge = Edge { p, q: point_id };
                 Self::edge_event(edge, point, context, observer);
 
                 observer.edge_event(edge, context);
@@ -1469,30 +1453,30 @@ impl Sweeper {
     }
 }
 
-fn parse_polyline(polyline: Vec<Point>, points: &mut PointsBuilder) -> Vec<Edge> {
-    let mut edge_list = Vec::with_capacity(polyline.len());
+fn parse_polyline(polyline: Vec<Point>, points: &mut PointsBuilder) {
+    // here we need to set points' edges
+    let mut point_iter = polyline
+        .iter()
+        .map(|p| (points.add_steiner_point(*p), p))
+        .collect::<Vec<_>>()
+        .into_iter();
 
-    let mut point_iter = polyline.iter().map(|p| (points.add_point(*p), p));
     if let Some(first_point) = point_iter.next() {
         let mut last_point = first_point;
         loop {
             match point_iter.next() {
                 Some(p2) => {
                     let edge = Edge::new(last_point, p2);
-                    edge_list.push(edge);
+                    points.get_point_mut(edge.q).unwrap().edges.push(edge.p);
                     last_point = p2;
                 }
                 None => {
                     let edge = Edge::new(last_point, first_point);
-                    edge_list.push(edge);
+                    points.get_point_mut(edge.q).unwrap().edges.push(edge.p);
                     break;
                 }
             }
         }
-
-        edge_list
-    } else {
-        vec![]
     }
 }
 
