@@ -215,6 +215,20 @@ impl AdvancingFrontVec {
         Some(self.nodes[index].1.to_node(index, point, self))
     }
 
+    /// Get the node identified by `point`
+    pub fn get_node_with_id(&self, node_id: &NodeId) -> Option<NodeRef> {
+        let index = match self.nodes.get(node_id.index_hint) {
+            Some(node) if node.1.point_id == node_id.point_id => {
+                // index_hint match
+                Ok(node_id.index_hint)
+            }
+            _ => self.search_by_key(&PointKey(node_id.point)),
+        };
+
+        let index = index.ok()?;
+        Some(self.nodes[index].1.to_node(index, node_id.point, self))
+    }
+
     /// update node's triangle
     pub fn update_triangle(&mut self, point: Point, triangle_id: TriangleId) {
         if let Some((p, i)) = self.access_cache {
@@ -233,6 +247,24 @@ impl AdvancingFrontVec {
     /// Note: even if the node is deleted, this also returns next node as if it is not deleted
     pub fn locate_next_node(&self, point: Point) -> Option<NodeRef> {
         let idx = match self.search_by_key(&PointKey(point)) {
+            Ok(idx) => idx + 1,
+            Err(idx) => idx,
+        };
+        if idx < self.nodes.len() {
+            Some(
+                self.nodes[idx]
+                    .1
+                    .to_node(idx, self.nodes[idx].0.point(), self),
+            )
+        } else {
+            None
+        }
+    }
+
+    /// Get next node of the node identified by `point`
+    /// Note: even if the node is deleted, this also returns next node as if it is not deleted
+    pub fn locate_next_node_by_id(&self, node_id: &mut NodeId) -> Option<NodeRef> {
+        let idx = match self.resolve_index_for_id(node_id) {
             Ok(idx) => idx + 1,
             Err(idx) => idx,
         };
@@ -278,6 +310,20 @@ impl AdvancingFrontVec {
 
     /// Get prev node of the node identified by `point`
     /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
+    pub fn locate_prev_node_by_id(&self, node_id: &mut NodeId) -> Option<NodeRef> {
+        let idx = match self.resolve_index_for_id(node_id) {
+            Ok(idx) | Err(idx) if idx > 0 => idx - 1,
+            _ => return None,
+        };
+        Some(
+            self.nodes[idx]
+                .1
+                .to_node(idx, self.nodes[idx].0.point(), self),
+        )
+    }
+
+    /// Get prev node of the node identified by `point`
+    /// Note: even if the node is deleted, then this returns prev node as if it is not deleted
     pub(super) fn prev_node(&self, node: &NodeRef) -> Option<NodeRef> {
         if node.index == 0 {
             return None;
@@ -293,5 +339,21 @@ impl AdvancingFrontVec {
 
     fn search_by_key(&self, key: &PointKey) -> Result<usize, usize> {
         self.nodes.binary_search_by_key(key, |e| e.0)
+    }
+
+    /// resolve node_id's latest index.
+    /// Return Err(index to insert) when the node is deleted
+    fn resolve_index_for_id(&self, node_id: &mut NodeId) -> Result<usize, usize> {
+        match self.nodes.get(node_id.index_hint) {
+            Some(node) if node.1.point_id == node_id.point_id => {
+                // index_hint match
+                Ok(node_id.index_hint)
+            }
+            _ => {
+                let idx = self.search_by_key(&PointKey(node_id.point))?;
+                node_id.index_hint = idx;
+                Ok(idx)
+            }
+        }
     }
 }
